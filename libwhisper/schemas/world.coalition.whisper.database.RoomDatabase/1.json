@@ -1,0 +1,464 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 1,
+    "identityHash": "e2d5c19eeace4d25bfceeb5e8bbbfd80",
+    "entities": [
+      {
+        "tableName": "PeerTid",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`row_id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `tid` TEXT NOT NULL, `last_seen` INTEGER NOT NULL, `session_key_row_id` INTEGER NOT NULL, FOREIGN KEY(`session_key_row_id`) REFERENCES `SessionKey`(`row_id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "row_id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "tid",
+            "columnName": "tid",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "seen",
+            "columnName": "last_seen",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "skRowId",
+            "columnName": "session_key_row_id",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "columnNames": [
+            "row_id"
+          ],
+          "autoGenerate": true
+        },
+        "indices": [
+          {
+            "name": "index_PeerTid_tid",
+            "unique": true,
+            "columnNames": [
+              "tid"
+            ],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_PeerTid_tid` ON `${TABLE_NAME}` (`tid`)"
+          },
+          {
+            "name": "index_PeerTid_row_id",
+            "unique": false,
+            "columnNames": [
+              "row_id"
+            ],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_PeerTid_row_id` ON `${TABLE_NAME}` (`row_id`)"
+          },
+          {
+            "name": "index_PeerTid_session_key_row_id",
+            "unique": false,
+            "columnNames": [
+              "session_key_row_id"
+            ],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_PeerTid_session_key_row_id` ON `${TABLE_NAME}` (`session_key_row_id`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "SessionKey",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "session_key_row_id"
+            ],
+            "referencedColumns": [
+              "row_id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "PeerContactEvent",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`row_id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `peripheral_hash` TEXT NOT NULL, `connect_time_ms` INTEGER NOT NULL, `organization` TEXT NOT NULL, `adv_v` INTEGER NOT NULL, `adv_tid_rowid` INTEGER NOT NULL, `adv_challenge` TEXT NOT NULL, `adv_hmac` TEXT NOT NULL, `rssi` INTEGER NOT NULL, `metadata` TEXT NOT NULL, FOREIGN KEY(`adv_tid_rowid`) REFERENCES `PeerTid`(`row_id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "row_id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "peripheralId",
+            "columnName": "peripheral_hash",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "connectTimeMillis",
+            "columnName": "connect_time_ms",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "organization",
+            "columnName": "organization",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "version",
+            "columnName": "adv_v",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "advPeerTidRowId",
+            "columnName": "adv_tid_rowid",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "advertisedChallenge",
+            "columnName": "adv_challenge",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "advertisedHmac",
+            "columnName": "adv_hmac",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "rssi",
+            "columnName": "rssi",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "metadata",
+            "columnName": "metadata",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "columnNames": [
+            "row_id"
+          ],
+          "autoGenerate": true
+        },
+        "indices": [
+          {
+            "name": "index_PeerContactEvent_row_id",
+            "unique": false,
+            "columnNames": [
+              "row_id"
+            ],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_PeerContactEvent_row_id` ON `${TABLE_NAME}` (`row_id`)"
+          },
+          {
+            "name": "index_PeerContactEvent_peripheral_hash",
+            "unique": false,
+            "columnNames": [
+              "peripheral_hash"
+            ],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_PeerContactEvent_peripheral_hash` ON `${TABLE_NAME}` (`peripheral_hash`)"
+          },
+          {
+            "name": "index_PeerContactEvent_adv_tid_rowid",
+            "unique": false,
+            "columnNames": [
+              "adv_tid_rowid"
+            ],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_PeerContactEvent_adv_tid_rowid` ON `${TABLE_NAME}` (`adv_tid_rowid`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "PeerTid",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "adv_tid_rowid"
+            ],
+            "referencedColumns": [
+              "row_id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "PeerPingEvent",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`row_id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `peer_tid_rowid` INTEGER NOT NULL, `ping_timestamp_ms` INTEGER NOT NULL, `elapsed_time_duration` INTEGER NOT NULL, FOREIGN KEY(`peer_tid_rowid`) REFERENCES `PeerTid`(`row_id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "row_id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "peerTidRowId",
+            "columnName": "peer_tid_rowid",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "pingTimestampMs",
+            "columnName": "ping_timestamp_ms",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "elapsedTimeDuration",
+            "columnName": "elapsed_time_duration",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "columnNames": [
+            "row_id"
+          ],
+          "autoGenerate": true
+        },
+        "indices": [
+          {
+            "name": "index_PeerPingEvent_row_id",
+            "unique": false,
+            "columnNames": [
+              "row_id"
+            ],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_PeerPingEvent_row_id` ON `${TABLE_NAME}` (`row_id`)"
+          },
+          {
+            "name": "index_PeerPingEvent_peer_tid_rowid",
+            "unique": false,
+            "columnNames": [
+              "peer_tid_rowid"
+            ],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_PeerPingEvent_peer_tid_rowid` ON `${TABLE_NAME}` (`peer_tid_rowid`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "PeerTid",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "peer_tid_rowid"
+            ],
+            "referencedColumns": [
+              "row_id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "WhisperEvent",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`row_id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `timestamp` INTEGER NOT NULL, `code` INTEGER NOT NULL, `int1` INTEGER NOT NULL, `int2` INTEGER NOT NULL, `str1` TEXT NOT NULL)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "row_id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "timestamp",
+            "columnName": "timestamp",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "code",
+            "columnName": "code",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "int1",
+            "columnName": "int1",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "int2",
+            "columnName": "int2",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "str1",
+            "columnName": "str1",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "columnNames": [
+            "row_id"
+          ],
+          "autoGenerate": true
+        },
+        "indices": [
+          {
+            "name": "index_WhisperEvent_row_id",
+            "unique": false,
+            "columnNames": [
+              "row_id"
+            ],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_WhisperEvent_row_id` ON `${TABLE_NAME}` (`row_id`)"
+          }
+        ],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "SessionKey",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`row_id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `session_key` TEXT NOT NULL, `version` INTEGER NOT NULL, `time_reference` INTEGER NOT NULL, `expiry_after_sec` INTEGER NOT NULL, `time_step` INTEGER NOT NULL, `kdf_id` TEXT NOT NULL, `is_local` INTEGER NOT NULL, `tag` TEXT NOT NULL)",
+        "fields": [
+          {
+            "fieldPath": "row_id",
+            "columnName": "row_id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "mk",
+            "columnName": "session_key",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "v",
+            "columnName": "version",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "tr",
+            "columnName": "time_reference",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "exp",
+            "columnName": "expiry_after_sec",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ts",
+            "columnName": "time_step",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "kdfId",
+            "columnName": "kdf_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isLocal",
+            "columnName": "is_local",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "tag",
+            "columnName": "tag",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "columnNames": [
+            "row_id"
+          ],
+          "autoGenerate": true
+        },
+        "indices": [
+          {
+            "name": "index_SessionKey_session_key",
+            "unique": true,
+            "columnNames": [
+              "session_key"
+            ],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_SessionKey_session_key` ON `${TABLE_NAME}` (`session_key`)"
+          },
+          {
+            "name": "index_SessionKey_row_id",
+            "unique": false,
+            "columnNames": [
+              "row_id"
+            ],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_SessionKey_row_id` ON `${TABLE_NAME}` (`row_id`)"
+          }
+        ],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "LocationUpdate",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`row_id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `timestamp` INTEGER NOT NULL, `latitude` REAL NOT NULL, `longitude` REAL NOT NULL, `altitude` REAL NOT NULL)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "row_id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "timestamp",
+            "columnName": "timestamp",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "latitude",
+            "columnName": "latitude",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "longitude",
+            "columnName": "longitude",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "altitude",
+            "columnName": "altitude",
+            "affinity": "REAL",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "columnNames": [
+            "row_id"
+          ],
+          "autoGenerate": true
+        },
+        "indices": [
+          {
+            "name": "index_LocationUpdate_row_id",
+            "unique": false,
+            "columnNames": [
+              "row_id"
+            ],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_LocationUpdate_row_id` ON `${TABLE_NAME}` (`row_id`)"
+          }
+        ],
+        "foreignKeys": []
+      }
+    ],
+    "views": [],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'e2d5c19eeace4d25bfceeb5e8bbbfd80')"
+    ]
+  }
+}
