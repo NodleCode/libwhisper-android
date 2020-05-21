@@ -18,21 +18,13 @@
 
 package world.coalition.whisper
 
-import android.util.Base64
 import androidx.test.core.app.ApplicationProvider
-import androidx.test.espresso.matcher.ViewMatchers.assertThat
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import kotlinx.coroutines.runBlocking
-import org.hamcrest.CoreMatchers
 import org.junit.FixMethodOrder
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.junit.runners.MethodSorters
-import world.coalition.whisper.id.SessionKeyParam
-import world.coalition.whisper.id.TidGeneratorBlake2B
-import world.coalition.whisper.database.PeerContactEvent
 import world.coalition.whisper.database.WhisperDatabase
-import java.security.SecureRandom
 
 /**
  * @author Lucien Loiseau on 05/04/20.
@@ -51,39 +43,10 @@ class TestTimeProcessKeys {
 
     @Test
     fun stage1_feedTable() {
-        val random = SecureRandom()
-        val SKA = TidGeneratorBlake2B.New(0,1000000,1)
-        //val start = System.currentTimeMillis()
-        for(i in 0..1000) {
-            //println(">>>>>> generate contact:  $i")
-            // generate contact
-            val challenge = ByteArray(5)
-            random.nextBytes(challenge)
-            val tid = SKA.generateNthTidWithChallenge(i.toLong(), challenge)
-            val peripheral: String = Base64.encodeToString(byteArrayOf((i%100).toByte()), Base64.NO_WRAP)
-            val c = PeerContactEvent(peripheral, i.toLong(), "test", 1, tid.hashIdBase64(), tid.challengeIdBase64(), tid.hmacBase64(), -1*(i%100), "")
-            db.addContact(c)
-        }
-        //val end = System.currentTimeMillis()
-        //println(">>>>>>>>>>: time to feed 1000 keys: ${end - start}")
-        val contactDumps = db.roomDb.peerContactEventDao().getAll()
-        assertThat(contactDumps.size, CoreMatchers.equalTo(1001))
     }
 
     @Test
     fun stage2_process100keys() {
-        val infected = mutableListOf<SessionKeyParam>()
-        for (i in 0..100) {
-            //println(">>>>>  creating sk: $i")
-            infected.add(TidGeneratorBlake2B.New(i.toLong(), 100000,1).sessionKey)
-        }
-
-        val start = System.currentTimeMillis()
-        runBlocking {
-            db.processInfectedKeys(infected,"COID19",24*14)
-        }
-        val end = System.currentTimeMillis()
-        println(">>>>>>>>>>: time to query 100 keys: ${end - start}")
     }
 
 

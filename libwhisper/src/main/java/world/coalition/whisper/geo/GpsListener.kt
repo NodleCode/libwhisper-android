@@ -29,51 +29,53 @@ import android.location.LocationManager
 import android.os.Bundle
 import android.os.HandlerThread
 import androidx.core.content.PermissionChecker
+import ch.hsr.geohash.GeoHash
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import world.coalition.whisper.BuildConfig
 import world.coalition.whisper.Whisper
 import world.coalition.whisper.WhisperCore
-import world.coalition.whisper.database.LocationUpdate
 
 /**
  * TODO this is not the most battery friendly approach better use play service.
  * @author Lucien Loiseau on 08/04/20.
  */
-class GpsLogger(val core: WhisperCore) : LocationListener {
+class GpsListener(val core: WhisperCore) : LocationListener {
 
     private val log: Logger = LoggerFactory.getLogger(Whisper::class.java)
     private var mLocationManager: LocationManager? = null
-    private var mHandlerThread: HandlerThread = HandlerThread("gps-logger")
+    private var mHandlerThread: HandlerThread = HandlerThread("gps-listener")
     private val mCriteria: Criteria = createLocationCriteria()
+    private var listener: (Location) -> Unit = {}
 
-    private fun checkPermissions(): Boolean {
+    private fun checkPermissions(context: Context): Boolean {
         return (PermissionChecker.checkSelfPermission(
-            core.context,
+            context,
             Manifest.permission.ACCESS_FINE_LOCATION
         ) == PermissionChecker.PERMISSION_GRANTED
                 && PermissionChecker.checkSelfPermission(
-            core.context,
+            context,
             Manifest.permission.ACCESS_COARSE_LOCATION
         ) == PermissionChecker.PERMISSION_GRANTED)
     }
 
-    private fun isLocationEnabled(): Boolean {
+    private fun isLocationEnabled(context: Context): Boolean {
         val locationManager: LocationManager =
-            core.context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+            context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
         return locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER) || locationManager.isProviderEnabled(
             LocationManager.NETWORK_PROVIDER
         )
     }
 
-    fun start() {
+    fun start(context: Context, listener: (Location) -> Unit) {
         if (!core.whisperConfig.enablePrivacyBox) return
-        if (!checkPermissions()) return
-        if (!isLocationEnabled()) return
-        if(mHandlerThread.isAlive) return
+        if (!checkPermissions(context)) return
+        if (!isLocationEnabled(context)) return
+        if (mHandlerThread.isAlive) return
         mHandlerThread.start()
-        
-        mLocationManager = core.context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+
+        this.listener = listener
+        mLocationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
         val bestProvider = mLocationManager?.getBestProvider(mCriteria, true) ?: return
         try {
             mLocationManager?.requestLocationUpdates(
@@ -93,14 +95,15 @@ class GpsLogger(val core: WhisperCore) : LocationListener {
 
     fun stop() {
         mLocationManager?.removeUpdates(this)
+        listener = {}
         mHandlerThread.quitSafely()
     }
 
     private fun createLocationCriteria(): Criteria {
-        val criteria =  Criteria()
+        val criteria = Criteria()
         criteria.powerRequirement = POWER_LOW
         criteria.isCostAllowed = false
-        criteria.accuracy =  ACCURACY_LOW
+        criteria.accuracy = ACCURACY_LOW
         return criteria
     }
 
@@ -109,15 +112,7 @@ class GpsLogger(val core: WhisperCore) : LocationListener {
     override fun onLocationChanged(location: Location?) {
         if (location != null) {
             log.debug(">>> location update: (${location.latitude}, ${location.longitude}, ${location.altitude})")
-            core.db.roomDb.locationUpdateDao().insert(
-                LocationUpdate(
-                    System.currentTimeMillis(),
-                    location.latitude,
-                    location.longitude,
-                    location.altitude
-                )
-            )
-
+            listener(location)
         }
     }
 

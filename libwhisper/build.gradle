@@ -5,7 +5,10 @@ plugins {
     id 'kotlin-kapt'
     id 'kotlinx-serialization' apply true
     id 'com.cookpad.android.plugin.license-tools'
+    id 'com.github.dcendents.android-maven'
 }
+
+group='com.github.NodleCode'
 
 android {
     compileSdkVersion 29
@@ -38,6 +41,10 @@ android {
         }
     }
 
+    lintOptions {
+        disable 'InvalidPackage'
+    }
+
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_1_8
         targetCompatibility JavaVersion.VERSION_1_8
@@ -53,10 +60,11 @@ dependencies {
     api group: 'org.slf4j', name:'slf4j-api', version: '1.7.30'
 
     // crypto
-    api group: 'org.bouncycastle', name: 'bcprov-debug-jdk15to18', version: '1.64'
+    //api group: 'org.bouncycastle', name: 'bcprov-debug-jdk15to18', version: '1.64'
+    api group: 'org.bouncycastle', name: 'bcprov-jdk15on', version: '1.65'
 
-    // gps location
-    implementation 'com.google.android.gms:play-services-location:17.0.0'
+    // geohash
+    implementation 'ch.hsr:geohash:1.4.0'
 
     // serialization
     implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"

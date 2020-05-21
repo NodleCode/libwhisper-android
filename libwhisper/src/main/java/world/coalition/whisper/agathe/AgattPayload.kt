@@ -16,50 +16,38 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-package world.coalition.whisper.id
+package world.coalition.whisper.agathe
 
-import android.util.Base64
 import kotlinx.serialization.Serializable
 
 /**
- * @author Lucien Loiseau on 28/03/20.
+ * @author Lucien Loiseau on 30/03/20.
+ *
+ * The payload as advertised by the device over BLE
  */
 @Serializable
-data class SessionKeyParam(
-    val SecretKey: ByteArray,
-    val TimeReferenceSec: Long,
-    val ExpireAfterSec: Int,
-    val TimeStepSec: Int,
-    val KdfId: String
+data class AgattPayload(
+    val version: Int,
+    val organization: Int,
+    val pubKey: ByteArray
 ) {
-
-    override fun toString(): String {
-        return "s=key=${Base64.encodeToString(SecretKey, Base64.NO_WRAP)} ref=$TimeReferenceSec expire=$ExpireAfterSec step=$TimeStepSec kdfid=$KdfId"
-    }
-
-    // auto generated
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (javaClass != other?.javaClass) return false
 
-        other as SessionKeyParam
+        other as AgattPayload
 
-        if (!SecretKey.contentEquals(other.SecretKey)) return false
-        if (TimeReferenceSec != other.TimeReferenceSec) return false
-        if (ExpireAfterSec != other.ExpireAfterSec) return false
-        if (TimeStepSec != other.TimeStepSec) return false
-        if (KdfId != other.KdfId) return false
+        if (version != other.version) return false
+        if (organization != other.organization) return false
+        if (!pubKey.contentEquals(other.pubKey)) return false
 
         return true
     }
 
-    // auto generated
     override fun hashCode(): Int {
-        var result = SecretKey.contentHashCode()
-        result = 31 * result + TimeReferenceSec.hashCode()
-        result = 31 * result + ExpireAfterSec
-        result = 31 * result + TimeStepSec
-        result = 31 * result + KdfId.hashCode()
+        var result = version
+        result = 31 * result + organization
+        result = 31 * result + pubKey.contentHashCode()
         return result
     }
 }

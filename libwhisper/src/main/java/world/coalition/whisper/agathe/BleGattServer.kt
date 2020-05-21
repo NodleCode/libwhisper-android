@@ -28,18 +28,15 @@ import org.slf4j.LoggerFactory
 import world.coalition.whisper.Whisper
 import world.coalition.whisper.WhisperCore
 import world.coalition.whisper.agathe.android.BluetoothUtil
-import world.coalition.whisper.database.PeerContactEvent
-import java.security.SecureRandom
+import world.coalition.whisper.database.BleConnectEvent
+import world.coalition.whisper.id.ECUtil
 
 /**
  * @author Lucien Loiseau on 27/03/20.
  */
 class BleGattServer(val core: WhisperCore) {
-    
+
     class DeviceState {
-        var step: Int = 1
-        var readRequestPeerChallenge: ByteArray? = null
-        var readRequestResponseChallenge: ByteArray = ByteArray(6)
         var readRequestResponseBuffer: ByteArray? = null
         var writeRequestBuffer: ByteArray? = null
     }
@@ -47,19 +44,17 @@ class BleGattServer(val core: WhisperCore) {
     private val log: Logger = LoggerFactory.getLogger(Whisper::class.java)
     private var mGattServer: BluetoothGattServer? = null
     private var mGattServerCallback: BluetoothGattServerCallback? = null
-    private val random = SecureRandom()
 
 
     /**
      * For each node that connect, we follow the following steps:
      *
      * step0... waiting for connection
-     * step1... waiting for receiving a write request (challenge)
-     * step2... waiting for receiving a read request
-     *          -> replying with secure ID + new challenge
-     * step3... waiting for receiving a write request (peer's secure ID)
+     * step1... waiting for receiving a read request
+     *          -> replying with pubkey
+     * step2... waiting for receiving a write request (peer's pubkey)
      */
-    private fun getGattServerCallback(): BluetoothGattServerCallback {
+    private fun getGattServerCallback(context: Context): BluetoothGattServerCallback {
         return mGattServerCallback ?: let {
             mGattServerCallback = object : BluetoothGattServerCallback() {
 
@@ -96,31 +91,23 @@ class BleGattServer(val core: WhisperCore) {
                     characteristic: BluetoothGattCharacteristic
                 ) {
                     super.onCharacteristicReadRequest(device, requestId, offset, characteristic)
-                    if (getState(device).step != 2) {
-                        log.warn("device ${device.address} < read request unexpected!")
-                        return fail(device, requestId)
-                    }
-
-                    if (getState(device).readRequestPeerChallenge == null) {
-                        log.warn("device ${device.address} < read request but no challenge!")
-                        return fail(device, requestId)
-                    } else {
-                        log.warn("device ${device.address} < read request, replying with secure id")
-                        getState(device).step = 3
-                        return success(device, requestId, offset, response(device).sliceArray(offset until response(device).size))
-                    }
+                    log.warn("device ${device.address} < read request, replying with pubkey")
+                    return success(
+                        device,
+                        requestId,
+                        offset,
+                        response(device).sliceArray(offset until response(device).size)
+                    )
                 }
 
                 private fun response(device: BluetoothDevice): ByteArray {
                     return getState(device).readRequestResponseBuffer ?: let {
-                        random.nextBytes(getState(device).readRequestResponseChallenge)
                         val payload = ProtoBuf.dump(
-                            TIDWithChallengePayload.serializer(),
-                            TIDWithChallengePayload(
+                            AgattPayload.serializer(),
+                            AgattPayload(
                                 1,
                                 core.whisperConfig.organizationCode,
-                                core.getSecureId(state[device]!!.readRequestPeerChallenge!!),
-                                getState(device).readRequestResponseChallenge
+                                ECUtil.savePublicKey(core.getPublicKey(context))
                             )
                         )
                         getState(device).readRequestResponseBuffer =
@@ -156,50 +143,25 @@ class BleGattServer(val core: WhisperCore) {
 
                     log.info("device ${device.address} < write request - recv full payload")
                     when (cmd) {
-                        0x00 -> {
-                            if (getState(device).step != 1) {
-                                log.info("device ${device.address} < write request - unexpected")
-                                return fail(device, requestId)
-                            }
-
-                            // alice ---send challenge---> bob
-                            getState(device).readRequestPeerChallenge =
-                                getState(device).writeRequestBuffer?.sliceArray(2..1 + expectedPayloadSize)
-                            log.info(
-                                "device ${device.address} < write request - recv challenge: " + Base64.encodeToString(
-                                    getState(device).readRequestPeerChallenge,
-                                    Base64.NO_WRAP
-                                )
-                            )
-                            getState(device).step = 2
-                            getState(device).writeRequestBuffer = null
-                            return success(device, requestId, offset, value)
-                        }
-                        0x02 -> {
-                            // alice ---send TID---> bob
+                        0x01 -> {
+                            // alice ---pubkey---> bob
                             try {
-                                if (getState(device).step != 3) {
-                                    log.info("device ${device.address} < write request - unexpected")
-                                    return fail(device, requestId)
-                                }
-
-                                val tidPayload = ProtoBuf.load(
-                                    TIDPayload.serializer(),
+                                val payload = ProtoBuf.load(
+                                    AgattPayload.serializer(),
                                     getState(device).writeRequestBuffer!!.sliceArray(2..1 + expectedPayloadSize)
                                 )
-                                // check that the received challenge matches the one we sent
-                                if (!tidPayload.challenge.contentEquals(getState(device).readRequestResponseChallenge)) {
-                                    throw Exception("recv challenge does not match the one we sent")
-                                }
 
-                                log.debug("device: ${device.address} < write request - whisper secureid ${Base64.encodeToString(tidPayload.temporaryId, Base64.NO_WRAP)}")
+                                log.debug("device: ${device.address} < write request - whisper pubkey ${Base64.encodeToString(payload.pubKey, Base64.NO_WRAP)}")
                                 runBlocking {
-                                    core.channel.send(
-                                        PeerContactEvent.fromTIDPayload(
-                                            tidPayload,
+                                    core.channel?.send(
+                                        BleConnectEvent(
+                                            false,
                                             device.address,
-                                            0,
-                                            System.currentTimeMillis()
+                                            System.currentTimeMillis(),
+                                            payload.organization,
+                                            1,
+                                            payload.pubKey,
+                                            -1
                                         )
                                     )
                                 }
@@ -262,7 +224,7 @@ class BleGattServer(val core: WhisperCore) {
             )
 
             val whisperGattCharacteristic = BluetoothGattCharacteristic(
-                core.whisperConfig.whisperCharacteristicUUID,
+                core.whisperConfig.whisperV3CharacteristicUUID,
                 BluetoothGattCharacteristic.PROPERTY_READ or BluetoothGattCharacteristic.PROPERTY_WRITE or BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT,
                 BluetoothGattCharacteristic.PERMISSION_READ or BluetoothGattCharacteristic.PERMISSION_WRITE
             )
@@ -270,7 +232,7 @@ class BleGattServer(val core: WhisperCore) {
             whisperGattService.addCharacteristic(whisperGattCharacteristic)
 
             mGattServer = (context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager?)
-                ?.openGattServer(context, getGattServerCallback())
+                ?.openGattServer(context, getGattServerCallback(context))
             mGattServer?.addService(whisperGattService)
         }
     }

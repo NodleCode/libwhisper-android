@@ -23,7 +23,7 @@ import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
-import world.coalition.whisper.id.SessionKeyParam
+import world.coalition.whisper.id.KeyPairParam
 
 /**
  * @author Lucien Loiseau on 29/03/20.
@@ -31,39 +31,30 @@ import world.coalition.whisper.id.SessionKeyParam
 @Entity(
     indices = [
         Index(
-            value = ["session_key"],
+            value = ["public_key"],
             unique = true
         )]
 )
-data class SessionKey(
-    @ColumnInfo(name = "session_key") val mk: String,
-    @ColumnInfo(name = "version") val v: Int,
+data class UserKeyPair(
+    @ColumnInfo(name = "private_key") val prvKey: String,
+    @ColumnInfo(name = "public_key") val pubKey: String,
     @ColumnInfo(name = "time_reference") val tr: Long,
-    @ColumnInfo(name = "expiry_after_sec") val exp: Int,
-    @ColumnInfo(name = "time_step") val ts: Int,
-    @ColumnInfo(name = "kdf_id") val kdfId: String,
-    @ColumnInfo(name = "is_local") val isLocal: Boolean,
-    @ColumnInfo(name = "tag") val tag: String
+    @ColumnInfo(name = "expiry_after_sec") val exp: Int
 ) {
     @PrimaryKey(autoGenerate = true) @ColumnInfo(name = "row_id", index = true) var row_id: Long = 0
 
-    constructor(sk: SessionKeyParam, local: Boolean, tag: String) : this(
-        Base64.encodeToString(sk.SecretKey, Base64.NO_WRAP),
-        1,
-        sk.TimeReferenceSec,
-        sk.ExpireAfterSec,
-        sk.TimeStepSec,
-        sk.KdfId,
-        local,
-        tag
+    constructor(param: KeyPairParam) : this(
+        Base64.encodeToString(param.privateKeyRaw(), Base64.NO_WRAP),
+        Base64.encodeToString(param.publicKeyRaw(), Base64.NO_WRAP),
+        param.TimeReferenceSec,
+        param.ExpireAfterSec
     )
 
-    fun toSecretParam(): SessionKeyParam {
-        return SessionKeyParam(
-            Base64.decode(
-                mk,
-                Base64.NO_WRAP
-            ), tr, exp, ts, kdfId
-        )
+    fun toKeyPairParam(): KeyPairParam {
+        return KeyPairParam(
+            Base64.decode(prvKey,Base64.NO_WRAP),
+            Base64.decode(pubKey,Base64.NO_WRAP),
+            tr,
+            exp)
     }
 }

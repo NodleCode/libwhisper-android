@@ -16,26 +16,21 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-package world.coalition.whisper
+package world.coalition.whisper.database
 
-import org.junit.Test
+import androidx.room.*
 
-class TestSecureIdGenerator {
+/**
+ * @author Lucien Loiseau on 29/03/20.
+ */
+@Dao
+interface UserKeyPairDao {
+    @Query("SELECT * FROM userkeypair ORDER BY time_reference DESC ")
+    fun getAll(): List<UserKeyPair>
 
-    val challenge = byteArrayOf(0x00, 0x01, 0x02, 0x03)
+    @Query("SELECT * FROM userkeypair ORDER BY time_reference DESC LIMIT 1;")
+    fun getLast(): UserKeyPair?
 
-    @Test
-    fun testIdGeneration() {
-        val sessionKey = world.coalition.whisper.id.TidGeneratorBlake2B.New()
-        for(i in 0..10) {
-            val t = sessionKey.sessionKey.TimeReferenceSec + sessionKey.sessionKey.TimeStepSec*i
-            println("${sessionKey.sessionKey.TimeReferenceSec}  $t")
-            val sidt = sessionKey.generateTidWithChallenge(t, challenge)
-            assert(sidt.validate(sessionKey.sessionKey.SecretKey))
-            val sidc = sessionKey.generateNthTidWithChallenge(i.toLong(), challenge)
-            assert(sidc.validate(sessionKey.sessionKey.SecretKey))
-            assert(sidt == sidc)
-        }
-    }
-
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    fun insert(user: UserKeyPair): Long
 }

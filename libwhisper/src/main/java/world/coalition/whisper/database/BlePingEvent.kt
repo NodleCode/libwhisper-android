@@ -18,21 +18,30 @@
 
 package world.coalition.whisper.database
 
-import androidx.annotation.NonNull
 import androidx.room.ColumnInfo
 import androidx.room.Entity
+import androidx.room.ForeignKey
 import androidx.room.PrimaryKey
 
 /**
- * @author Lucien Loiseau on 08/04/20.
+ * @author Lucien Loiseau on 07/04/20.
  */
-@Entity
-class LocationUpdate(
-    @ColumnInfo(name = "timestamp") var timestamp: Long, // event timestamp
-    @ColumnInfo(name = "latitude")  var latitude: Double,
-    @ColumnInfo(name = "longitude") var longitude: Double,
-    @ColumnInfo(name = "altitude")  var altitude: Double
+@Entity(
+    foreignKeys = [
+        ForeignKey(
+            entity = PrivateEncounterToken::class,
+            parentColumns = ["row_id"],
+            childColumns = ["pet_rowid"],
+            onDelete = ForeignKey.CASCADE
+        )]
+)
+data class BlePingEvent(
+    @ColumnInfo(name = "pet_rowid", index = true) val petRowId: Long,
+    @ColumnInfo(name = "ping_timestamp_ms") val pingTimestampMs: Long,
+    @ColumnInfo(name = "rssi") val rssi: Int,
+    @ColumnInfo(name = "elapsed_time_duration") val elapsedTimeDuration: Long
 ) {
-    @NonNull
-    @PrimaryKey(autoGenerate = true) @ColumnInfo(name = "row_id", index = true) var id: Long = 0
+    @PrimaryKey(autoGenerate = true)
+    @ColumnInfo(name = "row_id", index = true)
+    var id: Long = 0
 }

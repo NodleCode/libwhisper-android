@@ -16,34 +16,12 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-package world.coalition.whisper.database
-
-import androidx.room.*
+package world.coalition.whisper
 
 /**
- * @author Lucien Loiseau on 04/04/20.
+ * @author Lucien Loiseau on 21/05/20.
  */
-@Entity(
-    indices = [
-        Index(
-            value = ["tid"],
-            unique = true
-        )],
-    foreignKeys = [
-        ForeignKey(
-            entity = SessionKey::class,
-            parentColumns = ["row_id"],
-            childColumns = ["session_key_row_id"],
-            onDelete = ForeignKey.CASCADE
-        )
-    ]
+data class GeoToken(
+    val token: String,
+    val geohash: String
 )
-data class PeerTid(
-    @ColumnInfo(name = "tid") val tid: String,
-    @ColumnInfo(name = "last_seen") val seen: Long,
-    @ColumnInfo(name = "session_key_row_id", index = true) val skRowId: Long
-) {
-    @PrimaryKey(autoGenerate = true)
-    @ColumnInfo(name = "row_id", index = true)
-    var id: Long = 0
-}
