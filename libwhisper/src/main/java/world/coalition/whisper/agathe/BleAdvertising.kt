@@ -36,7 +36,7 @@ class BleAdvertising(val core: WhisperCore) {
     private val log: Logger = LoggerFactory.getLogger(Whisper::class.java)
 
     fun updateAdvertisingParameters(context: Context, manufacturerId: Int, manufacturerData: ByteArray) {
-        if (!BluetoothUtil.checkBluetoothOn(context)) return
+        if (!BluetoothUtil.checkBluetoothOn()) return
 
         val settings = AdvertiseSettings.Builder()
             .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_HIGH)

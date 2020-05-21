@@ -31,6 +31,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.junit.runners.MethodSorters
 import world.coalition.whisper.database.WhisperDatabase
+import world.coalition.whisper.id.ECUtil
 
 /**
  * @author Lucien Loiseau on 05/04/20.
@@ -38,7 +39,7 @@ import world.coalition.whisper.database.WhisperDatabase
 
 @RunWith(AndroidJUnit4::class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
-class TestSessionKeys {
+class TestKeyPair {
     private var db = WhisperDatabase.memory(ApplicationProvider.getApplicationContext())
 
     @Test
@@ -50,41 +51,42 @@ class TestSessionKeys {
     fun stage1_testSessionKeyInsertion() {
         // db should be empty
         runBlocking {
-            val n = db.extractLastSessionKeys(5)
+            val n = db.roomDb.userKeyPairDao().getAll()
             assertThat(n.size, equalTo(0))
         }
 
         // this one should create a new key
-        val gen1 = db.getCurrentGenerator(10, 100, 10)
-        val k1 = Base64.encodeToString(gen1.getSecretParam().SecretKey, Base64.NO_WRAP)
+        val kp1 = db.getCurrentKeyPair(10, 100)
+        val k1 =  Base64.encodeToString(ECUtil.savePrivateKey(kp1.private), Base64.NO_WRAP) + Base64.encodeToString(ECUtil.savePublicKey(kp1.public), Base64.NO_WRAP)
+
 
         // this one should return previous because not expire
-        val gen2 = db.getCurrentGenerator(20, 100, 10)
-        val k2 = Base64.encodeToString(gen2.getSecretParam().SecretKey, Base64.NO_WRAP)
+        val kp2 = db.getCurrentKeyPair(20, 100)
+        val k2 =  Base64.encodeToString(ECUtil.savePrivateKey(kp2.private), Base64.NO_WRAP) + Base64.encodeToString(ECUtil.savePublicKey(kp2.public), Base64.NO_WRAP)
         assertThat(k2, equalTo(k1))
 
         // this one should create a new key because previous expired (120 > 10 + 100)
-        val gen3 = db.getCurrentGenerator(130, 100, 10)
-        val k3 = Base64.encodeToString(gen3.getSecretParam().SecretKey, Base64.NO_WRAP)
+        val kp3 = db.getCurrentKeyPair(130, 100)
+        val k3 =  Base64.encodeToString(ECUtil.savePrivateKey(kp3.private), Base64.NO_WRAP) + Base64.encodeToString(ECUtil.savePublicKey(kp3.public), Base64.NO_WRAP)
         assertThat(k3, IsNot(equalTo(k2)))
 
         // this one should create a new key because previous expired (120 > 10 + 100)
-        val gen4 = db.getCurrentGenerator(240, 100, 10)
-        val k4 = Base64.encodeToString(gen4.getSecretParam().SecretKey, Base64.NO_WRAP)
+        val kp4 = db.getCurrentKeyPair(240, 100)
+        val k4 =  Base64.encodeToString(ECUtil.savePrivateKey(kp4.private), Base64.NO_WRAP) + Base64.encodeToString(ECUtil.savePublicKey(kp4.public), Base64.NO_WRAP)
         assertThat(k4, IsNot(equalTo(k3)))
 
         // this timestamp < current one so it matches
-        val gen5 = db.getCurrentGenerator(120, 100, 10)
-        val k5 = Base64.encodeToString(gen5.getSecretParam().SecretKey, Base64.NO_WRAP)
+        val kp5 = db.getCurrentKeyPair(120, 100)
+        val k5 =  Base64.encodeToString(ECUtil.savePrivateKey(kp5.private), Base64.NO_WRAP) + Base64.encodeToString(ECUtil.savePublicKey(kp5.public), Base64.NO_WRAP)
         assertThat(k5, equalTo(k4))
 
         runBlocking {
-            val n = db.extractLastSessionKeys(5)
+            val n = db.roomDb.userKeyPairDao().getAll()
             assertThat(n.size, equalTo(3))
             // descending order, most recent first
-            val kn1 = Base64.encodeToString(n[0].SecretKey, Base64.NO_WRAP)
-            val kn2 = Base64.encodeToString(n[1].SecretKey, Base64.NO_WRAP)
-            val kn3 = Base64.encodeToString(n[2].SecretKey, Base64.NO_WRAP)
+            val kn1 = n[0].prvKey+n[0].pubKey
+            val kn2 = n[1].prvKey+n[1].pubKey
+            val kn3 = n[2].prvKey+n[2].pubKey
             assertThat(kn1, equalTo(k4))
             assertThat(kn2, equalTo(k3))
             assertThat(kn3, equalTo(k1))
@@ -93,41 +95,9 @@ class TestSessionKeys {
         // get last 1 key should return gen5
         // should only have 1 left (gen4)
         runBlocking {
-            val n = db.extractLastSessionKeys(1)
-            assertThat(n.size, equalTo(1))
-            val klast = Base64.encodeToString(n[0].SecretKey, Base64.NO_WRAP)
+            val n = db.roomDb.userKeyPairDao().getLast()
+            val klast = n!!.prvKey+n.pubKey
             assertThat(klast, equalTo(k4))
-        }
-
-        // we evict the last key
-        db.evictLocalKeys(listOf(gen4.getSecretParam()))
-
-        // should have 3 keys left because last one, which was active, was regenerated
-        runBlocking {
-            val n = db.extractLastSessionKeys(5)
-            assertThat(n.size, equalTo(3))
-            // descending order, most recent first
-            val kn1 = Base64.encodeToString(n[0].SecretKey, Base64.NO_WRAP)
-            val kn2 = Base64.encodeToString(n[1].SecretKey, Base64.NO_WRAP)
-            val kn3 = Base64.encodeToString(n[2].SecretKey, Base64.NO_WRAP)
-            assertThat(kn1, IsNot(equalTo(k4)))
-            assertThat(kn1, IsNot(equalTo(k3)))
-            assertThat(kn1, IsNot(equalTo(k1)))
-            assertThat(kn2, equalTo(k3))
-            assertThat(kn3, equalTo(k1))
-        }
-
-        // we evict the first two keys
-        db.evictLocalKeys(listOf(gen1.getSecretParam(), gen3.getSecretParam()))
-
-        // should only have 1 left (the new one)
-        runBlocking {
-            val n = db.extractLastSessionKeys(5)
-            assertThat(n.size, equalTo(1))
-            val klast = Base64.encodeToString(n[0].SecretKey, Base64.NO_WRAP)
-            assertThat(klast, IsNot(equalTo(k4)))
-            assertThat(klast, IsNot(equalTo(k3)))
-            assertThat(klast, IsNot(equalTo(k1)))
         }
     }
 

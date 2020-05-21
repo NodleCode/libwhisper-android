@@ -16,12 +16,9 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-
 package world.coalition.whisper
 
 import android.content.Context
-import world.coalition.whisper.id.SessionKeyParam
-import world.coalition.whisper.database.BoundingBox
 import world.coalition.whisper.exceptions.WhisperAlreadyStartedException
 import world.coalition.whisper.exceptions.WhisperNotStartedException
 
@@ -33,8 +30,8 @@ interface Whisper {
     companion object {
         var core: WhisperCore? = null
 
-        fun with(context: Context): Whisper {
-            return core?:WhisperCore(context)
+        fun instance(): Whisper {
+            return core?:WhisperCore()
         }
     }
 
@@ -48,7 +45,7 @@ interface Whisper {
      * @param context Android Context
      */
     @Throws(WhisperAlreadyStartedException::class)
-    fun start(): Whisper
+    fun start(context: Context): Whisper
 
     /**
      * immediately start the whisper library:
@@ -61,7 +58,7 @@ interface Whisper {
      * @param config Whisper configuration
      */
     @Throws(WhisperAlreadyStartedException::class)
-    fun start(config: WhisperConfig): Whisper
+    fun start(context: Context, config: WhisperConfig): Whisper
 
     /**
      * stops the whisper library. This method suspend the execution and only returns
@@ -80,47 +77,44 @@ interface Whisper {
     fun isStarted(): Boolean
 
     /**
-     * Extract the last session keys for this users.
+     * Extract the last tell tokens that hasn't been shared yet.
+     * This is the list of tokens you submit if user has tested
+     * positive to a risk.
      *
      * @param period in seconds during which session keys were used
-     * @return the last n session keys or the maximum number of keys available
+     * @return the tell-token set
      */
-    suspend fun extractLastPeriodSessionKeys(periodSec: Long): List<SessionKeyParam>
+    suspend fun getLastTellTokens(context: Context, periodSec: Long): List<GeoToken>
 
     /**
-     * Extract the bounding box overlapping at least all of the user's past location for a given
-     * time period. The bounding box is not a perfect fit and is at least 100km randomly
-     * padded on each side.
+     * Mark those tokens as shared.
      *
-     * @param period in seconds describing the time slice to consider
-     * @return a bounding box or null if no location data is available
+     * @param tokens the tell-token set
      */
-    suspend fun getPrivacyBox(periodSec: Long): BoundingBox?
+    suspend fun tellTokensShared(context: Context, tokens: List<String>)
 
     /**
-     * Process keys that has been tagged as tainted with regards to a given risk. This method
-     * will iterate over all the key generators supplied as parameters and checks against the
-     * local db if there is any hits.
+     * Extract the last hear tokens. This is the list of tokens you submit to the match-maker
+     * to query about current user risk status.
      *
-     * @param keys the list of infected key generator
-     * @param risk of the underlying risk associated to the keys
-     * @return the number of "hits" with the local db.
+     * @param period in seconds during which session keys were used
+     * @return the hear-token set
      */
-    suspend fun processTaintedKeys(keys: List<SessionKeyParam>, risk: String): Int
+    suspend fun getLastHearTokens(context: Context, periodSec: Long): List<GeoToken>
 
     /**
-     * Evict local keys that has been exposed. An evicted key will no longer be returned
-     * when calling extractLastPeriodSessionKeys. If the current key is part of the evicted
-     * it will be mark as evicted and a new key will be generated
+     * process a hear-token set (peer's tell token) to perform match-making locally.
      *
-     * @param evicted the key to evict
+     * @param infectedSet the list of tell tokens
+     * @param tag of the risk, for instance "covid-19"
      */
-    suspend fun evictLocalKey(evicted: SessionKeyParam)
+    suspend fun processHearTokens(context: Context, infectedSet: List<String>, tag: String): Int
 
     /**
      * return an estimate of the exposure against a given risk.
+     * This method only works in a decentralized scheme if current node where fed tokens.
      *
      * @param tag of the risk, for instance "covid-19"
      */
-    suspend fun getRiskExposure(tag: String): Int
+    suspend fun getRiskExposure(context: Context, tag: String): Int
 }

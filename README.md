@@ -36,7 +36,7 @@ allprojects {
 2. Add the libwhisper dependency
 ```
 dependencies {
-        implementation 'com.github.NodleCode:coalition-android:v1.0'
+        implementation 'com.github.NodleCode:libwhisper-android:3.0'
 }
 ```
 

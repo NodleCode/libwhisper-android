@@ -91,18 +91,9 @@ class BluetoothLE(ctx: Context) : BluetoothScanner(ctx) {
     }
 
     private fun checkBLE(): Boolean {
-        if (!BluetoothUtil.checkBluetoothPermission(
-                context
-            )
-        ) return false
-        if (!BluetoothUtil.checkBLEPermission(
-                context
-            )
-        ) return false
-        if (!BluetoothUtil.checkBluetoothOn(
-                context
-            )
-        ) return false
+        if (!BluetoothUtil.checkBluetoothPermission(context)) return false
+        if (!BluetoothUtil.checkBLEPermission(context)) return false
+        if (!BluetoothUtil.checkBluetoothOn()) return false
         if (mScanner != null) return true
 
         return try {

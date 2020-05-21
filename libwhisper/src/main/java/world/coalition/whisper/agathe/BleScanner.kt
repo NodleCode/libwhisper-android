@@ -19,6 +19,7 @@
 package world.coalition.whisper.agathe
 
 import android.bluetooth.BluetoothDevice
+import android.content.Context
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import org.slf4j.Logger
@@ -29,7 +30,7 @@ import world.coalition.whisper.agathe.android.BleScanRecord
 import world.coalition.whisper.agathe.android.BluetoothScanner
 import world.coalition.whisper.agathe.android.OnBleScanResultAvailable
 import world.coalition.whisper.database.EventCode
-import world.coalition.whisper.database.PeerContactEvent
+import world.coalition.whisper.database.BleConnectEvent
 import world.coalition.whisper.database.WhisperEvent
 import kotlin.random.Random
 
@@ -68,11 +69,10 @@ class BleScanner(val core: WhisperCore) {
         val peerPriority = scanRecord.manufacturerSpecificData
             ?.get(core.whisperConfig.nodleBluetoothManufacturerId)
             ?.takeIf { it.size >= 2 }
-            ?.takeIf { it.get(0) == core.whisperConfig.nodlePayloadTypeWhisper }
+            ?.takeIf { it[0] == core.whisperConfig.nodlePayloadTypeWhisper }
             ?.get(1)
-            ?.toUByte()
-            ?: 0.toUByte()
-        return priority[1].toUByte() >= peerPriority
+            ?: 0
+        return priority[1] >= peerPriority
     }
 
     /**
@@ -84,15 +84,15 @@ class BleScanner(val core: WhisperCore) {
      * - step4: wait and goto step1
      */
     private var job: Job? = null
-    fun start(upstream: Channel<PeerContactEvent>) {
+    fun start(context: Context, upstream: Channel<BleConnectEvent>) {
         if (job != null) return
-        var lasGen = core.getGenerator().getSecretParam()
+        var lastPubKey = core.getPublicKey(context)
         job = CoroutineScope(Dispatchers.IO).launch {
-            val scanner = BluetoothScanner.New(core.context)
+            val scanner = BluetoothScanner.New(context)
             while (true) {
-                bleGattServer.checkGATTServer(core.context)
+                bleGattServer.checkGATTServer(context)
                 bleAdvertising.updateAdvertisingParameters(
-                    core.context,
+                    context,
                     core.whisperConfig.nodleBluetoothManufacturerId,
                     priority
                 )
@@ -101,50 +101,50 @@ class BleScanner(val core: WhisperCore) {
                 log.debug(">>> start scanning for ${core.whisperConfig.scannerScanDurationMillis / 1000} sec")
                 val startScan = System.currentTimeMillis()
                 val peerSet = HashMap<BluetoothDevice, Pair<Int, Boolean>>()
-                val currentGen = core.getGenerator().getSecretParam()
+                val currentPubKey = core.getPublicKey(context)
                 scanner.startScanCycle(
                     core.whisperConfig.scannerScanDurationMillis,
                     listOf(core.whisperConfig.whisperServiceUUID),
                     OnBleScanResultAvailable { d, r, p ->
                         if (peerSet[d] == null) {
                             // we add peer in connect if it has lower priority or if our temporary id was refreshed
-                            if (currentDeviceHasPriority(p) ||  currentGen != lasGen) {
-                                log.debug(">>> ${d.address} (${PeerContactEvent.Base64SHA256(d.address)}) : add peer to connect set")
+                            if (currentDeviceHasPriority(p) ||  currentPubKey != lastPubKey) {
+                                log.debug(">>> ${d.address} (${BleConnectEvent.Base64SHA256(d.address)}) : add peer to connect set")
                                 peerSet[d] = Pair(r, true)
                             } else {
-                                log.debug(">>> ${d.address} (${PeerContactEvent.Base64SHA256(d.address)}): ignore peer (has higher priority)")
+                                log.debug(">>> ${d.address} (${BleConnectEvent.Base64SHA256(d.address)}): ignore peer (has higher priority)")
                                 peerSet[d] = Pair(r, false)
                             }
                         }
                     })
                 val stopScan = System.currentTimeMillis()
-                core.db.roomDb.whisperEventDao()
+                core.getDb(context).roomDb.whisperEventDao()
                     .insert(WhisperEvent(System.currentTimeMillis(), EventCode.SCAN_STOPPED.code, (stopScan-startScan).toInt(),peerSet.size,""))
                 log.debug(">>> stop scanning")
-                lasGen = currentGen
-
+                lastPubKey = currentPubKey
 
                 // step 2 - FILTERING - we remove peer we recently connected to
                 val now = System.currentTimeMillis()
                 val connectSet = peerSet.filter {
                     // we get the last contact reading from this peripheral (if any)
-                    val lastConnect = core.db.roomDb.peerContactEventDao()
-                        .getLastConnect(PeerContactEvent.Base64SHA256(it.key.address))
+                    val lastConnect = core.getDb(context).roomDb.bleConnectEventDao()
+                        .getLastConnect(BleConnectEvent.Base64SHA256(it.key.address))
 
                     // we check if we need to remove connectable peer from connect set (throttling)
+                    val rssi = it.value.first
                     val mustConnect = it.value.second
                     var mustThrottle = false
                     if (mustConnect && lastConnect != null) {
                         mustThrottle =
-                            now > lastConnect.connectTimeMillis + core.whisperConfig.mustReconnectAfterMillis
+                            now < lastConnect.connectTimeMillis + core.whisperConfig.mustReconnectAfterMillis
                         if (mustThrottle) {
-                            log.debug(">>> ${it.key.address} (${PeerContactEvent.Base64SHA256(it.key.address)}) ping too recent (${(now - lastConnect.connectTimeMillis) / 1000} sec), remove from connect set")
+                            log.debug(">>> ${it.key.address} (${BleConnectEvent.Base64SHA256(it.key.address)}) ping too recent (${(now - lastConnect.connectTimeMillis) / 1000} sec), remove from connect set")
                         }
                     }
 
                     if(lastConnect != null && (!mustConnect || (mustConnect && mustThrottle))) {
-                        log.debug(">>> ${it.key.address} (${PeerContactEvent.Base64SHA256(it.key.address)}) adding a ping")
-                        core.db.addPing(lastConnect.advPeerTidRowId, now, core.whisperConfig.pingMaxElapsedTimeMillis)
+                        log.debug(">>> ${it.key.address} (${BleConnectEvent.Base64SHA256(it.key.address)}) adding a ping")
+                        core.getDb(context).addPing(lastConnect.petRowId, rssi, now, core.whisperConfig.pingMaxElapsedTimeMillis)
                     }
 
                     mustConnect && !mustThrottle
@@ -155,7 +155,7 @@ class BleScanner(val core: WhisperCore) {
                 for (e in connectSet) {
                     if (!isActive) break
                     bleConnect.connectAndReadPeerId(
-                        core.context,
+                        context,
                         e.key,
                         e.value.first,
                         upstream
