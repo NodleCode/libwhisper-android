@@ -18,19 +18,24 @@
 
 package world.coalition.whisper.database
 
-import androidx.room.*
+import androidx.room.Dao
+import androidx.room.Insert
+import androidx.room.Query
 
 /**
- * @author Lucien Loiseau on 31/03/20.
+ * @author Lucien Loiseau on 09/04/20.
  */
 @Dao
-interface PeerContactEventDao {
-    @Query("SELECT * FROM peercontactevent")
-    fun getAll(): List<PeerContactEvent>
+interface BleConnectEventDao {
+    @Query("SELECT * FROM bleconnectevent")
+    fun getAll(): List<BleConnectEvent>
+
+    @Query("SELECT * FROM bleconnectevent WHERE connect_time_ms > :time ORDER BY connect_time_ms DESC")
+    fun getAllSince(time: Long): List<BleConnectEvent>
 
     @Insert
-    fun insert(cr: PeerContactEvent): Long
+    fun insert(cr: BleConnectEvent): Long
 
-    @Query("SELECT * from peercontactevent WHERE peripheral_hash = :peripheralHash ORDER BY connect_time_ms DESC LIMIT 1")
-    fun getLastConnect(peripheralHash: String): PeerContactEvent?
+    @Query("SELECT * from bleconnectevent WHERE peripheral_hash = :peripheralHash ORDER BY connect_time_ms DESC LIMIT 1")
+    fun getLastConnect(peripheralHash: String): BleConnectEvent?
 }

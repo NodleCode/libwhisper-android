@@ -18,24 +18,31 @@
 
 package world.coalition.whisper.database
 
-import androidx.room.Dao
-import androidx.room.Insert
-import androidx.room.Query
+import androidx.room.*
 
 /**
- * @author Lucien Loiseau on 08/04/20.
+ * @author Lucien Loiseau on 04/04/20.
  */
-@Dao
-interface LocationUpdateDao {
-    @Query("SELECT * FROM locationupdate")
-    fun getAll(): List<LocationUpdate>
-
-    @Insert
-    fun insert(location: LocationUpdate): Long
-
-    @Query("DELETE FROM locationupdate WHERE timestamp < :olderThan")
-    fun pruneOldData(olderThan: Long): Int
-
-    @Query("SELECT min(latitude) as minLatitude, min(longitude) as minLongitude, max(latitude) as maxLatitude, max(longitude) as maxLongitude FROM locationupdate WHERE timestamp >= :period")
-    fun boundingBox(period: Long): BoundingBox?
+@Entity(
+    indices = [
+        Index(
+            value = ["tell_token"],
+            unique = true
+        ),
+        Index(
+            value = ["hear_token"],
+            unique = true
+        )]
+)
+data class PrivateEncounterToken(
+    @ColumnInfo(name = "tell_token") val tellToken: String,
+    @ColumnInfo(name = "hear_token") val hearToken: String,
+    @ColumnInfo(name = "geo_hash")   var geohash: String,
+    @ColumnInfo(name = "last_seen")  val seen: Long,
+    @ColumnInfo(name = "shared") val shared: Boolean,
+    @ColumnInfo(name = "tag") val tag: String
+) {
+    @PrimaryKey(autoGenerate = true)
+    @ColumnInfo(name = "row_id", index = true)
+    var id: Long = 0
 }

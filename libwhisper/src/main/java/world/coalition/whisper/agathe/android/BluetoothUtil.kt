@@ -39,7 +39,7 @@ class BluetoothUtil {
                     PermissionChecker.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PermissionChecker.PERMISSION_GRANTED)
         }
 
-        fun checkBluetoothOn(context: Context): Boolean {
+        fun checkBluetoothOn(): Boolean {
             val mBluetoothAdapter = BluetoothAdapter.getDefaultAdapter()
             return mBluetoothAdapter?.isEnabled ?: false
         }

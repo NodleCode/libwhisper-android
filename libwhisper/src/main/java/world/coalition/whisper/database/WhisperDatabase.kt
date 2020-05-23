@@ -21,225 +21,148 @@ package world.coalition.whisper.database
 import android.content.Context
 import android.util.Base64
 import androidx.room.Room
-import org.slf4j.Logger
-import org.slf4j.LoggerFactory
-import world.coalition.whisper.Whisper
-import world.coalition.whisper.id.KdfAlgorithm
-import world.coalition.whisper.id.SessionKeyParam
-import world.coalition.whisper.id.TidGenerator
-import world.coalition.whisper.id.TidGeneratorBlake2B
+import world.coalition.whisper.id.ECUtil
+import world.coalition.whisper.id.KeyPairParam
+import world.coalition.whisper.id.ProofOfInteraction
+import java.security.KeyPair
+import java.security.PublicKey
 
 /**
  * @author Lucien Loiseau on 04/04/20.
  */
-class WhisperDatabase private constructor(val context: Context) {
+class WhisperDatabase private constructor() {
 
     companion object {
-        val localTag: String = "user-sk"
-
-        val unknownSessionKey: SessionKey = SessionKey(
-            "unknown",
-            1,
-            0,
-            0,
-            0,
-            "unknown",
-            true,
-            "DEFAULT_KEY_FOR_PEER_TABLE_FOREIGN_KEY"
-        )
-
         // for production purpose
         fun persistent(context: Context): WhisperDatabase {
-            val ret = WhisperDatabase(context)
+            val ret = WhisperDatabase()
             ret.roomDb = Room.databaseBuilder(
                 context,
                 RoomDatabase::class.java,
                 "whisper"
-            ).build()
-            ret.retrieveLastGenerator()
+            ).fallbackToDestructiveMigration().build()
             return ret
         }
 
         // for test instrumentation
         fun memory(context: Context): WhisperDatabase {
-            val ret = WhisperDatabase(context)
+            val ret = WhisperDatabase()
             ret.roomDb = Room.inMemoryDatabaseBuilder(
                 context,
                 RoomDatabase::class.java
-            ).allowMainThreadQueries().build()
-            ret.retrieveLastGenerator()
+            ).fallbackToDestructiveMigration().allowMainThreadQueries().build()
             return ret
         }
     }
 
-    private val log: Logger = LoggerFactory.getLogger(Whisper::class.java)
     lateinit var roomDb: RoomDatabase
         private set
 
-    val unknownSessionKeyRowId: Long by lazy {
-        roomDb.sessionKeyDao()
-            .getLast(1, unknownSessionKey.tag)
-            ?.let {
-                it.row_id
-            }
-            ?: let {
-                roomDb.sessionKeyDao().insert(unknownSessionKey)
-            }
-    }
-
-    private var idGen: TidGenerator? = null
+    private var keyPairParam: KeyPairParam? = null
 
     fun close() {
         roomDb.close()
     }
 
-    private fun retrieveLastGenerator() {
-        idGen = roomDb.sessionKeyDao().getLast(1, localTag)?.let {
-            TidGeneratorBlake2B(it.toSecretParam())
-        } // may still be null if no key in the db
-    }
+    fun getCurrentKeyPair(time: Long, expireAfterSec: Int): KeyPair {
+        keyPairParam = keyPairParam ?: roomDb.userKeyPairDao().getLast()?.toKeyPairParam()
+        // may still be null if no key in the db
 
-    private fun createNewGenerator(now: Long, expireAfterSec: Int, timeStepSec: Int) {
-        idGen = TidGeneratorBlake2B.New(now, expireAfterSec, timeStepSec)
-        log.info(">>> generating a new one: ${Base64.encodeToString(idGen!!.getSecretParam().SecretKey, Base64.NO_WRAP)}")
-        roomDb.sessionKeyDao().insert(SessionKey(idGen!!.getSecretParam(), true, localTag))
-    }
-
-    fun getCurrentGenerator(now: Long, expireAfterSec: Int, timeStepSec: Int): TidGenerator {
-        synchronized(this) {
-            idGen = idGen ?: roomDb.sessionKeyDao().getLast(1, localTag)?.let {
-                TidGeneratorBlake2B(it.toSecretParam())
-            } // may still be null if no key in the db
-
-            if (idGen == null || (idGen?.isExpire(now) != false)) {
-                createNewGenerator(now, expireAfterSec, timeStepSec)
-            }
+        if (keyPairParam == null || (keyPairParam?.isExpire(time) != false)) {
+            keyPairParam = KeyPairParam(ECUtil.generateKeyPair(), time, expireAfterSec)
+            roomDb.userKeyPairDao().insert(UserKeyPair(keyPairParam!!))
         }
-        return idGen!!
+        return keyPairParam!!.keyPair
     }
 
-    suspend fun extractLastSessionKeys(n: Int): List<SessionKeyParam> {
-        return roomDb.sessionKeyDao()
-            .getLast(1, localTag, n)
-            .map {
-                it.toSecretParam()
-            }
-    }
-
-    fun evictLocalKeys(evicted: List<SessionKeyParam>) {
-        synchronized(this) {
-            val currentGen = idGen
-            for (key in evicted) {
-                log.info(
-                    ">>> evicting key: ${Base64.encodeToString(
-                        key.SecretKey,
-                        Base64.NO_WRAP
-                    )}"
-                )
-                if (currentGen != null && currentGen.getSecretParam().SecretKey.contentEquals(key.SecretKey)) {
-                    createNewGenerator(
-                        System.currentTimeMillis(),
-                        currentGen.getSecretParam().ExpireAfterSec,
-                        currentGen.getSecretParam().TimeStepSec
-                    )
-                }
-                roomDb.sessionKeyDao()
-                    .delete(Base64.encodeToString(key.SecretKey, Base64.NO_WRAP))
-            }
-        }
+    fun getCurrentPublicKey(time: Long, expireAfterSec: Int): PublicKey {
+        return getCurrentKeyPair(time, expireAfterSec).public
     }
 
     /* contact processor */
-    fun addContact(peerContactEvent: PeerContactEvent): Long {
-        // grab the rowid for this peer
-        val peerTidRowId =
-            updateOrInsertPeerId(peerContactEvent.peerTid, peerContactEvent.connectTimeMillis)
+    fun addInteraction(
+        interactionEvent: BleConnectEvent,
+        proof: ProofOfInteraction,
+        geohash: String?): Long {
+
+        // grab the rowid for this pubkey
+        val petRowId =
+            updateOrInsertPet(proof, geohash?:"", interactionEvent.connectTimeMillis)
 
         // add a ping entry
         // a ping entry from a contact event is always inserted with an elapsed time of 0
-        roomDb.peerPingEventDao()
-            .insert(PeerPingEvent(peerTidRowId, peerContactEvent.connectTimeMillis, 0))
+        roomDb.blePingEventDao()
+            .insert(BlePingEvent(petRowId, interactionEvent.connectTimeMillis, interactionEvent.rssi, 0))
 
         // record contact entry
-        peerContactEvent.advPeerTidRowId = peerTidRowId
-        return roomDb.peerContactEventDao().insert(peerContactEvent)
+        interactionEvent.petRowId = petRowId
+        return roomDb.bleConnectEventDao().insert(interactionEvent)
     }
 
-    fun addPing(peripheralId: String, timeMs: Long, pingMaxElapsed: Long): Long? {
-        val lastConnect = roomDb.peerContactEventDao()
-            .getLastConnect(PeerContactEvent.Base64SHA256(peripheralId))
-        val peerTidRowId = lastConnect?.advPeerTidRowId ?: return null
-        return addPing(peerTidRowId, timeMs, pingMaxElapsed)
+    fun addPing(peripheralId: String, rssi: Int, timeMs: Long, pingMaxElapsed: Long): Long? {
+        val lastConnect = roomDb.bleConnectEventDao()
+            .getLastConnect(BleConnectEvent.Base64SHA256(peripheralId))
+        val petRowId = lastConnect?.petRowId ?: return null
+        return addPing(petRowId, rssi, timeMs, pingMaxElapsed)
     }
 
-    fun addPing(peerTidRowId: Long, timeMs: Long, pingMaxElapsed: Long): Long? {
-        val lastPing = roomDb.peerPingEventDao().getLast(peerTidRowId)
+    fun addPing(petRowId: Long, rssi: Int, timeMs: Long, pingMaxElapsed: Long): Long? {
+        val lastPing = roomDb.blePingEventDao().getLast(petRowId)
         val elapsed = lastPing?.pingTimestampMs?.minus(timeMs)?.times(-1) ?: -1
-        if (elapsed < pingMaxElapsed) {
-            return roomDb.peerPingEventDao().insert(PeerPingEvent(peerTidRowId, timeMs, elapsed))
+        if (elapsed < pingMaxElapsed) { // TODO && check RSSI threshold
+            return roomDb.blePingEventDao().insert(BlePingEvent(petRowId, timeMs, rssi, elapsed))
         }
         return null
     }
 
+    private fun updateOrInsertPet(proof: ProofOfInteraction, geohash: String, seen: Long): Long {
+        val tellToken = Base64.encodeToString(proof.tellToken, Base64.NO_WRAP)
+        val hearToken = Base64.encodeToString(proof.hearToken, Base64.NO_WRAP)
 
-    private fun updateOrInsertPeerId(peerId: String, seen: Long): Long {
-        return roomDb.peerTidDao()
-            .getRowId(peerId)
+        return roomDb.privateEncounterTokenDao()
+            .getRowIdForHearToken(hearToken)
             ?.let {
-                roomDb.peerTidDao().updateLastSeen(peerId, seen)
+                roomDb.privateEncounterTokenDao().updateLastSeen(it, seen)
                 it
             }
             ?: let {
-                roomDb.peerTidDao().insert(PeerTid(peerId, seen, unknownSessionKeyRowId))
+                roomDb.privateEncounterTokenDao().insert(
+                    PrivateEncounterToken(tellToken, hearToken, geohash, seen, false, ""))
             }
     }
 
-    fun processInfectedKeys(
-        infected: List<SessionKeyParam>,
-        tag: String,
-        forceKeyExpirySec: Int
-    ): Int {
-        val start = System.currentTimeMillis()
-        roomDb.whisperEventDao().insert(
-            WhisperEvent(
-                start,
-                EventCode.PROCESS_KEYS_START.code, infected.size, 0, tag
-            )
-        )
-        var nbOfMatches = 0
-        for (keyParam in infected.filter { it.KdfId == KdfAlgorithm.BLAKE2B160.code }) {
-            val gen = TidGeneratorBlake2B(keyParam)
-            val nbValidKeys =
-                (keyParam.ExpireAfterSec.coerceAtMost(forceKeyExpirySec) / keyParam.TimeStepSec)
-            var skRowId: Long? = null
-
-            for (keyId in 0..nbValidKeys) {
-                val tid = Base64.encodeToString(gen.generateNthTid(keyId.toLong()), Base64.NO_WRAP)
-                roomDb.peerTidDao().getRowId(tid)?.let {
-                    //  ( ✜︵✜)  !!  it's a match! we have met an infected individual
-
-                    // we add the session key if it wasn't inserted already
-                    skRowId = skRowId
-                        ?: roomDb.sessionKeyDao().insert(SessionKey(keyParam, false, tag))
-
-                    // we update the relationship between the sessionkey and the tid
-                    // TODO test wether inserting using rowid performs better than using tid
-                    roomDb.peerTidDao().updateSessionKey(tid, skRowId!!)
-                    nbOfMatches++
-                }
+    fun tellTokensShared(shared: List<String>) {
+        synchronized(this) {
+            for (tellToken in shared) {
+                roomDb.privateEncounterTokenDao().updateSharedStatus(tellToken, true)
             }
         }
+    }
+
+    fun processTellTokens(
+        infected: List<String>,
+        tag: String,
+        since: Long
+    ): Int {
+        val start = System.currentTimeMillis()
+        roomDb.whisperEventDao().insert(WhisperEvent(start, EventCode.PROCESS_KEYS_START.code, infected.size, 0, tag))
+        var nbOfMatches = 0
+
+        val tokens = HashMap<String, Long>()
+        roomDb.privateEncounterTokenDao().getAllSince(since).map { tokens.set(it.hearToken, it.id) }
+        for (peerTellToken in infected) {
+            if (tokens.containsKey(peerTellToken)) {
+                roomDb.privateEncounterTokenDao().updateTag(peerTellToken, tag)
+                nbOfMatches++
+            }
+        }
+
         val stop = System.currentTimeMillis()
-        roomDb.whisperEventDao().insert(
-            WhisperEvent(
-                stop,
-                EventCode.PROCESS_KEYS_STOP.code, (stop - start).toInt(), nbOfMatches, tag
-            )
-        )
+        roomDb.whisperEventDao().insert(WhisperEvent(stop, EventCode.PROCESS_KEYS_STOP.code, (stop - start).toInt(), nbOfMatches, tag))
         return nbOfMatches
     }
 
-    suspend fun getInfectionExposure(tag: String): Int {
-        return roomDb.sessionKeyDao().estimateExposure(tag)
+    suspend fun getRiskExposure(tag: String): Int {
+        return roomDb.privateEncounterTokenDao().estimateRiskExposure(tag)
     }
 }

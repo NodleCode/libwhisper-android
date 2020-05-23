@@ -16,11 +16,23 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-package world.coalition.whisper.id
+package world.coalition.whisper.database
+
+import androidx.room.Dao
+import androidx.room.Insert
+import androidx.room.Query
 
 /**
- * @author Lucien Loiseau on 05/04/20.
+ * @author Lucien Loiseau on 07/04/20.
  */
-enum class KdfAlgorithm(val code: String) {
-    BLAKE2B160("blake2b-160")
+@Dao
+interface BlePingEventDao {
+    @Query("SELECT * FROM blepingevent")
+    fun getAll(): List<BlePingEvent>
+
+    @Query("SELECT * FROM blepingevent WHERE pet_rowid = :petRowId ORDER BY ping_timestamp_ms DESC LIMIT 1")
+    fun getLast(petRowId: Long): BlePingEvent?
+
+    @Insert
+    fun insert(cr: BlePingEvent): Long
 }

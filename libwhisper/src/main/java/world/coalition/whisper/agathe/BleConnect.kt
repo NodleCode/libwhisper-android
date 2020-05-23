@@ -30,9 +30,8 @@ import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import world.coalition.whisper.Whisper
 import world.coalition.whisper.WhisperCore
-import world.coalition.whisper.database.PeerContactEvent
-import java.security.SecureRandom
-import java.util.*
+import world.coalition.whisper.database.BleConnectEvent
+import world.coalition.whisper.id.ECUtil
 
 /**
  * @author Lucien Loiseau on 30/03/20.
@@ -40,7 +39,6 @@ import java.util.*
 class BleConnect(val core: WhisperCore) {
 
     private val log: Logger = LoggerFactory.getLogger(Whisper::class.java)
-    private val random = SecureRandom()
 
     /**
      * connectAndReadPeerId, this is blocking!
@@ -52,7 +50,7 @@ class BleConnect(val core: WhisperCore) {
         context: Context,
         device: BluetoothDevice,
         rssi: Int,
-        upstream: Channel<PeerContactEvent>
+        upstream: Channel<BleConnectEvent>
     ) {
         /**
          * They are 7 asynchronous STEPS that must be performed syncronously.
@@ -61,11 +59,10 @@ class BleConnect(val core: WhisperCore) {
          * 1 ..... connect
          * 2 ..... try to increase MTU size (may be refused)
          * 3 ..... discover services
-         * 4 ..... write characteristic (challenge1)
-         * 5 ..... read whisper characteristic (peer tid + challenge1 + hmac, challenge2)
-         * 6 ..... write characteristic (send own tid + challenge2 + hmac)
-         * 7 ..... disconnect
-         * 8 ..... release the mutex
+         * 4 ..... read whisper characteristic (peer pubkey)
+         * 5 ..... write characteristic (current pubkey)
+         * 6 ..... disconnect
+         * 7 ..... release the mutex
          */
         val mutex = Mutex(true)
 
@@ -75,11 +72,7 @@ class BleConnect(val core: WhisperCore) {
         log.debug("device: ${device.address} > connecting..")
         device.connectGatt(context, false, object : BluetoothGattCallback() {
             var step = 1
-
             private var mtu = 20 // step 2
-            private val challengeToSend = ByteArray(6)  // step 4
-            private var challengeFromPeer: ByteArray? = null // step 5
-            private val todo = LinkedList<BluetoothGattCharacteristic>() // step 5X
 
             private fun step2(gatt: BluetoothGatt) {
                 step = 2
@@ -95,50 +88,21 @@ class BleConnect(val core: WhisperCore) {
                 log.debug("device: ${device.address} > discover services ...")
                 if (!gatt.discoverServices()) {
                     log.debug("device: ${device.address} < discovery failed")
-                    step7(gatt)
+                    step6(gatt)
                 }
             }
 
             private fun step4(gatt: BluetoothGatt) {
                 step = 4
-                val characteristic = gatt.services
-                    ?.last { it.uuid == core.whisperConfig.whisperServiceUUID}
-                    ?.getCharacteristic(core.whisperConfig.whisperCharacteristicUUID)
+                var characteristic = gatt.services
+                    .lastOrNull { it.uuid == core.whisperConfig.whisperServiceUUID }
+                    ?.getCharacteristic(core.whisperConfig.whisperV3CharacteristicUUID)
 
                 if (characteristic != null) {
-                    // create challenge
-                    random.nextBytes(challengeToSend)
-
-                    // sending it over
-                    characteristic.value = byteArrayOf(0x00,0x06) + challengeToSend
-                    log.debug("device: ${device.address} > writing challenge...")
-                    if (gatt.writeCharacteristic(characteristic)) {
-                        return
-                    }
-                }
-
-                log.debug("device: ${device.address} < writing challenge failed!")
-                step7(gatt)
-            }
-
-            private fun step5(gatt: BluetoothGatt) {
-                step = 5
-                gatt.services
-                    .filter {
-                        it.uuid == core.whisperConfig.whisperServiceUUID
-                    }.map {
-                        todo.add(it.getCharacteristic(core.whisperConfig.whisperCharacteristicUUID))
-                    }
-                step5X(gatt)
-            }
-
-            private fun step5X(gatt: BluetoothGatt) {
-                step = 5
-                if (!todo.isEmpty()) {
-                    log.debug("device: ${device.address} > read characteristic ${todo.peek()?.uuid} ...")
-                    if (!gatt.readCharacteristic(todo.pop())) {
+                    log.debug("device: ${device.address} > read characteristic ${characteristic.uuid} ...")
+                    if (!gatt.readCharacteristic(characteristic)) {
                         log.debug("device: ${device.address} < read failed!")
-                        step7(gatt)
+                        step5(gatt)
                     }
                 } else {
                     step6(gatt)
@@ -146,38 +110,37 @@ class BleConnect(val core: WhisperCore) {
             }
 
             var timeout: Job? = null // FIXME we should not have to rely on this
-            private fun step6(gatt: BluetoothGatt) {
-                step = 6
+            private fun step5(gatt: BluetoothGatt) {
+                step = 5
                 val characteristic = gatt.services
-                    ?.last { it.uuid == core.whisperConfig.whisperServiceUUID }
-                    ?.getCharacteristic(core.whisperConfig.whisperCharacteristicUUID)
+                    ?.lastOrNull { it.uuid == core.whisperConfig.whisperServiceUUID }
+                    ?.getCharacteristic(core.whisperConfig.whisperV3CharacteristicUUID)
 
-                if (characteristic != null && challengeFromPeer != null) {
-                    // create tid payload
+                if (characteristic != null) {
+                    // create pubkey payload
                     val payload = ProtoBuf.dump(
-                        TIDPayload.serializer(),
-                        TIDPayload(
+                        AgattPayload.serializer(),
+                        AgattPayload(
                             1,
                             core.whisperConfig.organizationCode,
-                            core.getSecureId(challengeFromPeer!!)
+                            ECUtil.savePublicKey(core.getPublicKey(context))
                         )
                     )
 
                     // sending it over
-                    characteristic.value = byteArrayOf(0x02,payload.size.toByte())+payload
-                    log.debug("device: ${device.address} > writing challenge...")
+                    characteristic.value = byteArrayOf(0x01, payload.size.toByte()) + payload
+                    log.debug("device: ${device.address} > writing pubkey...")
                     if (gatt.writeCharacteristic(characteristic)) {
                         // FIXME if MTU is too small and multiple GATT packet must be sent
                         // sometimes the onCharacteristicWrite callback is not called even though
                         // all gatt packets are received on the peer.
-                        // the following timer is to avoid waiting the hardcoded 30 sec for
-                        // the timeout
+                        // the following timer is to avoid waiting 30 sec for the timeout
                         timeout = GlobalScope.launch {
                             delay(5000)
-                            if(isActive) {
+                            if (isActive) {
                                 log.debug("device: ${device.address} > //fixme// timeout fired!")
                                 timeout = null
-                                step7(gatt)
+                                step6(gatt)
                             }
                         }
                         return
@@ -185,17 +148,17 @@ class BleConnect(val core: WhisperCore) {
                 }
 
                 log.debug("device: ${device.address} > writing failed!")
-                step7(gatt)
+                step6(gatt)
             }
 
-            private fun step7(gatt: BluetoothGatt) {
-                step = 7
+            private fun step6(gatt: BluetoothGatt) {
+                step = 6
                 log.debug("device: ${device.address} > disconnecting ...")
                 gatt.disconnect()
             }
 
-            private fun step8() {
-                step = 8
+            private fun step7() {
+                step = 7
                 log.debug("device ${device.address} > unlocking mutex")
                 mutex.unlock()
             }
@@ -207,7 +170,7 @@ class BleConnect(val core: WhisperCore) {
                 if (status == GATT_SUCCESS && newState == BluetoothProfile.STATE_CONNECTED) {
                     step2(gatt)
                 } else {
-                    step8()
+                    step7()
                 }
             }
 
@@ -216,7 +179,7 @@ class BleConnect(val core: WhisperCore) {
                 log.debug("device: ${device.address} < mtu changed ($newMtu)")
                 mtu = newMtu - 3 // todo: why do I seem to only be able to send MTU-3 bytes?!
                 if (gatt == null) {
-                    return step8()
+                    return step7()
                 }
                 step3(gatt)
             }
@@ -227,53 +190,42 @@ class BleConnect(val core: WhisperCore) {
                 if (status == GATT_SUCCESS) {
                     return step4(gatt)
                 }
-                return step7(gatt)
+                return step6(gatt)
             }
 
-            // step 5 callback
+            // step 4 callback
             override fun onCharacteristicRead(
                 gatt: BluetoothGatt?,
                 characteristic: BluetoothGattCharacteristic?,
                 status: Int
             ) {
                 log.debug("device: ${device.address} < characteristic read ($status)")
-                if (gatt == null) return step8()
+                if (gatt == null) return step7()
                 if (characteristic == null || status != GATT_SUCCESS) {
-                    return step7(gatt)
+                    return step6(gatt)
                 }
 
-                processCoalitionPayload(characteristic)
-                step5X(gatt)
+                runBlocking {
+                    processAgattPayload(characteristic)
+                }
+
+                step5(gatt)
             }
 
-            // callback step 4 (write challenge) and 6 (write secure tid)
+            // callback step 5 (write pubkey)
             override fun onCharacteristicWrite(
                 gatt: BluetoothGatt?,
                 characteristic: BluetoothGattCharacteristic?,
                 status: Int
             ) {
                 timeout?.cancel()
-                when(step) {
-                    4 -> {
-                        log.debug("device: ${device.address} < characteristic write challenge ($status)")
-                        if (gatt == null) return step8()
-                        step5(gatt)
-                    }
-                    6 -> {
-                        log.debug("device: ${device.address} < characteristic write tid ($status)")
-                        if (gatt == null) return step8()
-                        step7(gatt)
-                    }
-                    else -> {
-                        // fatal but it should never happen
-                        if (gatt == null) return step8()
-                        step7(gatt)
-                    }
-                }
+                log.debug("device: ${device.address} < characteristic write pubkey ($status)")
+                if (gatt == null) return step7()
+                step6(gatt)
             }
 
-            fun processCoalitionPayload(characteristic: BluetoothGattCharacteristic) {
-                if (characteristic.uuid != core.whisperConfig.whisperCharacteristicUUID) return
+            fun processAgattPayload(characteristic: BluetoothGattCharacteristic) {
+                if (characteristic.uuid != core.whisperConfig.whisperV3CharacteristicUUID) return
                 if (characteristic.value == null) return
 
                 log.debug("device: ${device.address} < decoding wisper payload.. (size=${characteristic.value.size})")
@@ -283,27 +235,24 @@ class BleConnect(val core: WhisperCore) {
                     val payloadSize = characteristic.value[1]
 
                     if (cmd != 0x01.toByte()) throw Exception("header: unexpected type")
-                    if (payloadSize+2 > characteristic.value.size) throw Exception("header: wrong size")
+                    if (payloadSize + 2 > characteristic.value.size) throw Exception("header: wrong size")
 
                     val payload = ProtoBuf.load(
-                        TIDWithChallengePayload.serializer(),
-                        characteristic.value.sliceArray(2..payloadSize+1))
+                        AgattPayload.serializer(),
+                        characteristic.value.sliceArray(2..payloadSize + 1)
+                    )
 
-                    if(payload.challenge1.size != challengeToSend.size
-                        || !payload.challenge1.contentEquals(challengeToSend)) throw Exception("secureid: challenge doesn't match")
-
-                    challengeFromPeer = payload.challenge2
-                    log.debug("device: ${device.address} < whisper secureid ${Base64.encodeToString(payload.temporaryId,Base64.NO_WRAP)}")
-
-                    // channel as infinite buffer so it can't block but still need to wrap
-                    // otherwise this fun would require "suspend"
+                    log.debug("device: ${device.address} < whisper pubkey ${Base64.encodeToString(payload.pubKey, Base64.NO_WRAP)}")
                     CoroutineScope(Dispatchers.IO).launch {
                         upstream.send(
-                            PeerContactEvent.fromTIDWithChallengePayload(
-                                payload,
+                            BleConnectEvent(
+                                true,
                                 device.address,
-                                rssi,
-                                System.currentTimeMillis()
+                                System.currentTimeMillis(),
+                                payload.organization,
+                                1,
+                                payload.pubKey,
+                                rssi
                             )
                         )
                     }
