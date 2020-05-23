@@ -18,50 +18,31 @@
 
 package world.coalition.whisper
 
-import world.coalition.whisper.id.TidGeneratorBlake2B
-import world.coalition.whisper.id.SecureTid
-import world.coalition.whisper.database.PeerContactEvent
+import world.coalition.whisper.database.BleConnectEvent
+import world.coalition.whisper.id.ECUtil
+import world.coalition.whisper.id.KeyPairParam
+import world.coalition.whisper.id.ProofOfInteraction
 
 /**
  * @author Lucien Loiseau on 04/04/20.
  */
 object TestObjects {
-
-    val challenge1 = byteArrayOf(0x00, 0x01, 0x02, 0x03)
-    val challenge2 = byteArrayOf(0x04, 0x05, 0x06, 0x07)
-
-    val SKA = TidGeneratorBlake2B.New(0,1000,120)
-    val IDA1a = SKA.generateTidWithChallenge(0,challenge1)
-    val IDA1b = SKA.generateTidWithChallenge(70,challenge1)  // same hashid as ida1 different hmac
-    val IDA2a = SKA.generateTidWithChallenge(200, challenge1) // different hashid, different hmac
-
-    val SKB = TidGeneratorBlake2B.New(1000,1000,120)
-    val IDB1a = SKB.generateTidWithChallenge(1000,challenge1)
-    val IDB1b = SKB.generateTidWithChallenge(1070,challenge1)
-    val IDB2a = SKB.generateTidWithChallenge(1200,challenge1)
-
-    val SKC = TidGeneratorBlake2B.New(2000,1000,120)
-    val IDC1a = SKC.generateTidWithChallenge(2000,challenge1)
-    val IDC1b = SKC.generateTidWithChallenge(2070,challenge1)
-    val IDC2a = SKC.generateTidWithChallenge(2200,challenge1)
-
-    val SKD = TidGeneratorBlake2B.New(3000,1000,120)
-    val IDD1a = SKD.generateTidWithChallenge(3000,challenge1)
-    val IDD1b = SKD.generateTidWithChallenge(3070,challenge1)
-    val IDD2a = SKD.generateTidWithChallenge(3200,challenge1)
-
-    val SKE = TidGeneratorBlake2B.New(4000,1000,120)
-    val IDE1a = SKE.generateTidWithChallenge(4000,challenge1)
-    val IDE1b = SKE.generateTidWithChallenge(4070,challenge1)
-    val IDE2a = SKE.generateTidWithChallenge(4200,challenge1)
+    val SKA = KeyPairParam(ECUtil.generateKeyPair(),0,1000)
+    val SKB = KeyPairParam(ECUtil.generateKeyPair(),1000,1000)
+    val SKC = KeyPairParam(ECUtil.generateKeyPair(),2000,1000)
+    val SKD = KeyPairParam(ECUtil.generateKeyPair(),3000,1000)
+    val SKE = KeyPairParam(ECUtil.generateKeyPair(),4000,1000)
 
     val addra: String = "aa:aa:aa:aa:aa:aa"
     val addrb: String = "bb:bb:bb:bb:bb:bb"
     val addrc: String = "cc:cc:cc:cc:cc:cc"
     val addrd: String = "dd:dd:dd:dd:dd:dd"
-    val addre: String = "ee:ee:ee:ee:ee:ee"
 
-    fun contact(id: SecureTid, addr: String, time: Long): PeerContactEvent {
-        return PeerContactEvent(addr, time, "Coalition", 1, id.hashIdBase64(), id.challengeIdBase64(), id.hmacBase64(),0, "")
+    fun interaction(pub:ByteArray, peripheral: String, time: Long): BleConnectEvent {
+        return BleConnectEvent(true, peripheral, time, 0x01, 1, pub, 0)
+    }
+
+    fun poi(local: KeyPairParam, peer: KeyPairParam): ProofOfInteraction {
+        return ECUtil.getInteraction(local.keyPair, peer.publicKeyRaw())
     }
 }

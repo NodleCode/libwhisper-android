@@ -26,19 +26,17 @@ import androidx.room.RoomDatabase
  */
 @Database(
     entities = [
-        PeerTid::class,
-        PeerContactEvent::class,
-        PeerPingEvent::class,
+        BleConnectEvent::class,
+        PrivateEncounterToken::class,
+        BlePingEvent::class,
         WhisperEvent::class,
-        SessionKey::class,
-        LocationUpdate::class
-    ], version = 1
+        UserKeyPair::class
+    ], version = 2
 )
 abstract class RoomDatabase : RoomDatabase() {
-    abstract fun peerTidDao(): PeerTidDao
-    abstract fun peerContactEventDao(): PeerContactEventDao
-    abstract fun peerPingEventDao(): PeerPingEventDao
+    abstract fun privateEncounterTokenDao(): PrivateEncounterTokenDao
+    abstract fun bleConnectEventDao(): BleConnectEventDao
+    abstract fun blePingEventDao(): BlePingEventDao
     abstract fun whisperEventDao(): WhisperEventDao
-    abstract fun sessionKeyDao(): SessionKeyDao
-    abstract fun locationUpdateDao(): LocationUpdateDao
+    abstract fun userKeyPairDao(): UserKeyPairDao
 }

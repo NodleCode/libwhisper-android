@@ -1,16 +1,22 @@
 {
   "formatVersion": 1,
   "database": {
-    "version": 1,
-    "identityHash": "c805226eea359b1f5d40cfc03d84b366",
+    "version": 2,
+    "identityHash": "4a831a500bbf23d8d25c4f4c7b160976",
     "entities": [
       {
-        "tableName": "InteractionEvent",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`row_id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `peripheral_hash` TEXT NOT NULL, `connect_time_ms` INTEGER NOT NULL, `organization` TEXT NOT NULL, `adv_v` INTEGER NOT NULL, `adv_pubkey_rowid` INTEGER NOT NULL, `local_token` TEXT NOT NULL, `peer_token` TEXT NOT NULL, FOREIGN KEY(`adv_pubkey_rowid`) REFERENCES `PeerPubKey`(`row_id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "tableName": "BleConnectEvent",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`row_id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `initiator` INTEGER NOT NULL, `peripheral_hash` TEXT NOT NULL, `connect_time_ms` INTEGER NOT NULL, `organization` INTEGER NOT NULL, `adv_v` INTEGER NOT NULL, `adv_pubkey` TEXT NOT NULL, `pet_rowid` INTEGER NOT NULL, `rssi` INTEGER NOT NULL, FOREIGN KEY(`pet_rowid`) REFERENCES `PrivateEncounterToken`(`row_id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
         "fields": [
           {
             "fieldPath": "id",
             "columnName": "row_id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "initiator",
+            "columnName": "initiator",
             "affinity": "INTEGER",
             "notNull": true
           },
@@ -29,7 +35,7 @@
           {
             "fieldPath": "organization",
             "columnName": "organization",
-            "affinity": "TEXT",
+            "affinity": "INTEGER",
             "notNull": true
           },
           {
@@ -39,21 +45,21 @@
             "notNull": true
           },
           {
-            "fieldPath": "advPeerPubKeyRowId",
-            "columnName": "adv_pubkey_rowid",
+            "fieldPath": "advPeerPubKey",
+            "columnName": "adv_pubkey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "petRowId",
+            "columnName": "pet_rowid",
             "affinity": "INTEGER",
             "notNull": true
           },
           {
-            "fieldPath": "localToken",
-            "columnName": "local_token",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "peerToken",
-            "columnName": "peer_token",
-            "affinity": "TEXT",
+            "fieldPath": "rssi",
+            "columnName": "rssi",
+            "affinity": "INTEGER",
             "notNull": true
           }
         ],
@@ -65,53 +71,37 @@
         },
         "indices": [
           {
-            "name": "index_InteractionEvent_row_id",
+            "name": "index_BleConnectEvent_row_id",
             "unique": false,
             "columnNames": [
               "row_id"
             ],
-            "createSql": "CREATE INDEX IF NOT EXISTS `index_InteractionEvent_row_id` ON `${TABLE_NAME}` (`row_id`)"
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_BleConnectEvent_row_id` ON `${TABLE_NAME}` (`row_id`)"
           },
           {
-            "name": "index_InteractionEvent_peripheral_hash",
+            "name": "index_BleConnectEvent_peripheral_hash",
             "unique": false,
             "columnNames": [
               "peripheral_hash"
             ],
-            "createSql": "CREATE INDEX IF NOT EXISTS `index_InteractionEvent_peripheral_hash` ON `${TABLE_NAME}` (`peripheral_hash`)"
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_BleConnectEvent_peripheral_hash` ON `${TABLE_NAME}` (`peripheral_hash`)"
           },
           {
-            "name": "index_InteractionEvent_adv_pubkey_rowid",
+            "name": "index_BleConnectEvent_pet_rowid",
             "unique": false,
             "columnNames": [
-              "adv_pubkey_rowid"
+              "pet_rowid"
             ],
-            "createSql": "CREATE INDEX IF NOT EXISTS `index_InteractionEvent_adv_pubkey_rowid` ON `${TABLE_NAME}` (`adv_pubkey_rowid`)"
-          },
-          {
-            "name": "index_InteractionEvent_local_token",
-            "unique": false,
-            "columnNames": [
-              "local_token"
-            ],
-            "createSql": "CREATE INDEX IF NOT EXISTS `index_InteractionEvent_local_token` ON `${TABLE_NAME}` (`local_token`)"
-          },
-          {
-            "name": "index_InteractionEvent_peer_token",
-            "unique": false,
-            "columnNames": [
-              "peer_token"
-            ],
-            "createSql": "CREATE INDEX IF NOT EXISTS `index_InteractionEvent_peer_token` ON `${TABLE_NAME}` (`peer_token`)"
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_BleConnectEvent_pet_rowid` ON `${TABLE_NAME}` (`pet_rowid`)"
           }
         ],
         "foreignKeys": [
           {
-            "table": "PeerPubKey",
+            "table": "PrivateEncounterToken",
             "onDelete": "CASCADE",
             "onUpdate": "NO ACTION",
             "columns": [
-              "adv_pubkey_rowid"
+              "pet_rowid"
             ],
             "referencedColumns": [
               "row_id"
@@ -120,8 +110,8 @@
         ]
       },
       {
-        "tableName": "PeerPubKey",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`row_id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `peer_pub_key` TEXT NOT NULL, `last_seen` INTEGER NOT NULL)",
+        "tableName": "PrivateEncounterToken",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`row_id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `tell_token` TEXT NOT NULL, `hear_token` TEXT NOT NULL, `geo_hash` TEXT NOT NULL, `last_seen` INTEGER NOT NULL, `shared` INTEGER NOT NULL, `tag` TEXT NOT NULL)",
         "fields": [
           {
             "fieldPath": "id",
@@ -130,8 +120,20 @@
             "notNull": true
           },
           {
-            "fieldPath": "peerPubKey",
-            "columnName": "peer_pub_key",
+            "fieldPath": "tellToken",
+            "columnName": "tell_token",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "hearToken",
+            "columnName": "hear_token",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "geohash",
+            "columnName": "geo_hash",
             "affinity": "TEXT",
             "notNull": true
           },
@@ -139,6 +141,18 @@
             "fieldPath": "seen",
             "columnName": "last_seen",
             "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "shared",
+            "columnName": "shared",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "tag",
+            "columnName": "tag",
+            "affinity": "TEXT",
             "notNull": true
           }
         ],
@@ -150,27 +164,35 @@
         },
         "indices": [
           {
-            "name": "index_PeerPubKey_peer_pub_key",
+            "name": "index_PrivateEncounterToken_tell_token",
             "unique": true,
             "columnNames": [
-              "peer_pub_key"
+              "tell_token"
             ],
-            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_PeerPubKey_peer_pub_key` ON `${TABLE_NAME}` (`peer_pub_key`)"
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_PrivateEncounterToken_tell_token` ON `${TABLE_NAME}` (`tell_token`)"
           },
           {
-            "name": "index_PeerPubKey_row_id",
+            "name": "index_PrivateEncounterToken_hear_token",
+            "unique": true,
+            "columnNames": [
+              "hear_token"
+            ],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_PrivateEncounterToken_hear_token` ON `${TABLE_NAME}` (`hear_token`)"
+          },
+          {
+            "name": "index_PrivateEncounterToken_row_id",
             "unique": false,
             "columnNames": [
               "row_id"
             ],
-            "createSql": "CREATE INDEX IF NOT EXISTS `index_PeerPubKey_row_id` ON `${TABLE_NAME}` (`row_id`)"
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_PrivateEncounterToken_row_id` ON `${TABLE_NAME}` (`row_id`)"
           }
         ],
         "foreignKeys": []
       },
       {
-        "tableName": "PeerPingEvent",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`row_id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `peer_tid_rowid` INTEGER NOT NULL, `ping_timestamp_ms` INTEGER NOT NULL, `elapsed_time_duration` INTEGER NOT NULL)",
+        "tableName": "BlePingEvent",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`row_id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `pet_rowid` INTEGER NOT NULL, `ping_timestamp_ms` INTEGER NOT NULL, `rssi` INTEGER NOT NULL, `elapsed_time_duration` INTEGER NOT NULL, FOREIGN KEY(`pet_rowid`) REFERENCES `PrivateEncounterToken`(`row_id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
         "fields": [
           {
             "fieldPath": "id",
@@ -179,14 +201,20 @@
             "notNull": true
           },
           {
-            "fieldPath": "peerTidRowId",
-            "columnName": "peer_tid_rowid",
+            "fieldPath": "petRowId",
+            "columnName": "pet_rowid",
             "affinity": "INTEGER",
             "notNull": true
           },
           {
             "fieldPath": "pingTimestampMs",
             "columnName": "ping_timestamp_ms",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "rssi",
+            "columnName": "rssi",
             "affinity": "INTEGER",
             "notNull": true
           },
@@ -205,23 +233,35 @@
         },
         "indices": [
           {
-            "name": "index_PeerPingEvent_row_id",
+            "name": "index_BlePingEvent_row_id",
             "unique": false,
             "columnNames": [
               "row_id"
             ],
-            "createSql": "CREATE INDEX IF NOT EXISTS `index_PeerPingEvent_row_id` ON `${TABLE_NAME}` (`row_id`)"
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_BlePingEvent_row_id` ON `${TABLE_NAME}` (`row_id`)"
           },
           {
-            "name": "index_PeerPingEvent_peer_tid_rowid",
+            "name": "index_BlePingEvent_pet_rowid",
             "unique": false,
             "columnNames": [
-              "peer_tid_rowid"
+              "pet_rowid"
             ],
-            "createSql": "CREATE INDEX IF NOT EXISTS `index_PeerPingEvent_peer_tid_rowid` ON `${TABLE_NAME}` (`peer_tid_rowid`)"
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_BlePingEvent_pet_rowid` ON `${TABLE_NAME}` (`pet_rowid`)"
           }
         ],
-        "foreignKeys": []
+        "foreignKeys": [
+          {
+            "table": "PrivateEncounterToken",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "pet_rowid"
+            ],
+            "referencedColumns": [
+              "row_id"
+            ]
+          }
+        ]
       },
       {
         "tableName": "WhisperEvent",
@@ -342,53 +382,12 @@
           }
         ],
         "foreignKeys": []
-      },
-      {
-        "tableName": "LocationUpdate",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`row_id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `timestamp` INTEGER NOT NULL, `geohash` TEXT NOT NULL)",
-        "fields": [
-          {
-            "fieldPath": "id",
-            "columnName": "row_id",
-            "affinity": "INTEGER",
-            "notNull": true
-          },
-          {
-            "fieldPath": "timestamp",
-            "columnName": "timestamp",
-            "affinity": "INTEGER",
-            "notNull": true
-          },
-          {
-            "fieldPath": "geohash",
-            "columnName": "geohash",
-            "affinity": "TEXT",
-            "notNull": true
-          }
-        ],
-        "primaryKey": {
-          "columnNames": [
-            "row_id"
-          ],
-          "autoGenerate": true
-        },
-        "indices": [
-          {
-            "name": "index_LocationUpdate_row_id",
-            "unique": false,
-            "columnNames": [
-              "row_id"
-            ],
-            "createSql": "CREATE INDEX IF NOT EXISTS `index_LocationUpdate_row_id` ON `${TABLE_NAME}` (`row_id`)"
-          }
-        ],
-        "foreignKeys": []
       }
     ],
     "views": [],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'c805226eea359b1f5d40cfc03d84b366')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '4a831a500bbf23d8d25c4f4c7b160976')"
     ]
   }
 }

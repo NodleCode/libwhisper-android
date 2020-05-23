@@ -19,6 +19,8 @@
 package world.coalition.whisper
 
 import android.content.Context
+import android.util.Base64
+import ch.hsr.geohash.GeoHash
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -26,61 +28,70 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
-import world.coalition.whisper.id.SecureTid
-import world.coalition.whisper.id.SessionKeyParam
-import world.coalition.whisper.id.TidGenerator
 import world.coalition.whisper.agathe.BleScanner
-import world.coalition.whisper.database.BoundingBox
-import world.coalition.whisper.database.PeerContactEvent
+import world.coalition.whisper.database.BleConnectEvent
 import world.coalition.whisper.database.WhisperDatabase
 import world.coalition.whisper.exceptions.WhisperAlreadyStartedException
 import world.coalition.whisper.exceptions.WhisperNotStartedException
-import world.coalition.whisper.geo.GeoUtil
-import world.coalition.whisper.geo.GpsLogger
+import world.coalition.whisper.geo.GpsListener
+import world.coalition.whisper.id.ECUtil
+import java.security.KeyPair
+import java.security.PublicKey
 
 
 /**
  * @author Lucien Loiseau on 03/04/20.
  */
-class WhisperCore(val context: Context) : Whisper {
+class WhisperCore : Whisper {
 
     private val log: Logger = LoggerFactory.getLogger(Whisper::class.java)
 
-    var whisperConfig: WhisperConfig = WhisperConfig()
+    private var db: WhisperDatabase? = null
 
-    var db: WhisperDatabase = WhisperDatabase.persistent(context)
-
-    private var gpsLogger: GpsLogger? = null
+    private var gpsListener: GpsListener? = null
 
     private var coreJob: Job? = null
 
     private var bleScanner: BleScanner? = null
 
-    lateinit var channel: Channel<PeerContactEvent>
+    var channel: Channel<BleConnectEvent>? = null
         private set
 
+    var whisperConfig: WhisperConfig = WhisperConfig()
+        private set
+
+    fun getDb(context: Context): WhisperDatabase {
+        db = db ?: WhisperDatabase.persistent(context)
+        return db!!
+    }
+
     /** Public Methods - interface implementation **/
+    @Throws(WhisperAlreadyStartedException::class)
+    override fun start(context: Context) = start(context, WhisperConfig())
 
     @Throws(WhisperAlreadyStartedException::class)
-    override fun start() = start(WhisperConfig())
-
-    @Throws(WhisperAlreadyStartedException::class)
-    override fun start(config: WhisperConfig): Whisper {
+    override fun start(context: Context, config: WhisperConfig): Whisper {
         if (coreJob != null) throw WhisperAlreadyStartedException()
         log.debug("[+] starting lib whisper..")
 
         coreJob = CoroutineScope(Dispatchers.IO).launch {
-            gpsLogger = GpsLogger(this@WhisperCore)
+            var lastLocation: String? = null
 
+            gpsListener = GpsListener(this@WhisperCore)
             bleScanner = BleScanner(this@WhisperCore)
-
             channel = Channel(capacity = Channel.UNLIMITED)
+            gpsListener?.start(context) {
+                lastLocation = GeoHash.withCharacterPrecision(it.latitude, it.longitude, 4).toBase32()
+            }
+            bleScanner?.start(context, channel!!)
 
-            gpsLogger?.start()
-
-            bleScanner?.start(channel)
-
-            for (contact in channel) db.addContact(contact)
+            for (interaction in channel!!) {
+                val proof = ECUtil.getInteraction(
+                    getKeyPair(context),
+                    Base64.decode(interaction.advPeerPubKey, Base64.NO_WRAP)
+                )
+                getDb(context).addInteraction(interaction, proof, lastLocation)
+            }
         }
         return this
     }
@@ -89,53 +100,48 @@ class WhisperCore(val context: Context) : Whisper {
     override suspend fun stop() {
         if (coreJob == null) throw WhisperNotStartedException()
         log.debug("[+] stopping lib whisper..")
-        gpsLogger?.stop()
+        gpsListener?.stop()
         bleScanner?.stop()
-        channel.close()
+        channel?.close()
         coreJob!!.join()
-        db.close()
+        db?.close()
     }
 
     override fun isStarted(): Boolean {
         return coreJob != null
     }
 
-    fun getGenerator(): TidGenerator {
-        return db
-            .getCurrentGenerator(System.currentTimeMillis() / 1000, whisperConfig.sessionKeyValiditySec, whisperConfig.temporaryIdValiditySec)
+    fun getKeyPair(context: Context): KeyPair {
+        return getDb(context).getCurrentKeyPair(
+            System.currentTimeMillis() / 1000,
+            whisperConfig.pubkeyValidityPeriodSec)
     }
 
-    fun getSecureId(challenge: ByteArray): SecureTid {
-        return db
-            .getCurrentGenerator(System.currentTimeMillis() / 1000, whisperConfig.sessionKeyValiditySec, whisperConfig.temporaryIdValiditySec)
-            .generateTidWithChallenge(challenge)
+    fun getPublicKey(context: Context): PublicKey {
+        return getDb(context).getCurrentPublicKey(
+            System.currentTimeMillis() / 1000,
+            whisperConfig.pubkeyValidityPeriodSec)
     }
 
-    override suspend fun extractLastPeriodSessionKeys(periodSec: Long): List<SessionKeyParam> {
-        val localSk = db.roomDb.sessionKeyDao().getAllLocal()
-        val from = (System.currentTimeMillis()/1000) - periodSec
-        return localSk.filter {
-            (it.tr > from)
-        }.map {
-            it.toSecretParam()
-        }
+    override suspend fun getLastTellTokens(context: Context, periodSec: Long): List<GeoToken> {
+        val sinceMsec = System.currentTimeMillis() - periodSec*1000
+        return getDb(context).roomDb.privateEncounterTokenDao().getAllRemainingTellTokenSince(sinceMsec)
     }
 
-    override suspend fun evictLocalKey(evicted: SessionKeyParam) =
-        db.evictLocalKeys(listOf(evicted))
-
-    override suspend fun getPrivacyBox(periodSec: Long): BoundingBox? {
-        val perfectFit = db.roomDb.locationUpdateDao().boundingBox(periodSec*1000)
-        perfectFit ?:return null
-        if(perfectFit.minLatitude == 0.0 && perfectFit.minLongitude == 0.0) return null
-        return GeoUtil.fuzzyBoundingBox(perfectFit, whisperConfig.minimumBoundingBoxSize.coerceAtLeast(100000))
+    override suspend fun tellTokensShared(context: Context, tokens: List<String>) {
+        getDb(context).tellTokensShared(tokens)
     }
 
-    // may be cpu intensive
-    // TODO find ways to optimize this computation
-    override suspend fun processTaintedKeys(keys: List<SessionKeyParam>, risk: String) =
-        db.processInfectedKeys(keys, risk, whisperConfig.sessionKeyValiditySec)
+    override suspend fun getLastHearTokens(context: Context, periodSec: Long): List<GeoToken> {
+        val sinceMsec = System.currentTimeMillis() - periodSec*1000
+        return getDb(context).roomDb.privateEncounterTokenDao().getAllHearTokenSince(sinceMsec)
+    }
 
-    override suspend fun getRiskExposure(tag: String): Int =
-        db.getInfectionExposure(tag)
+    override suspend fun processHearTokens(context: Context, infectedSet: List<String>, tag: String): Int {
+        val sinceMsec = System.currentTimeMillis() - whisperConfig.incubationPeriod*1000
+        return getDb(context).processTellTokens(infectedSet, tag,  sinceMsec)
+    }
+
+    override suspend fun getRiskExposure(context: Context, tag: String): Int =
+        getDb(context).getRiskExposure(tag)
 }

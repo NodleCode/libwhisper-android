@@ -32,11 +32,9 @@ class WhisperConfig {
     var enablePrivacyBox: Boolean = false
     var locationUpdateDistance: Float = 0.0f
     var locationUpdateIntervalMillis: Long = 120000L // 2 minutes
-    var minimumBoundingBoxSize: Int = 100000 // 100 km
 
     /* Secure Id Parameters */
-    var sessionKeyValiditySec: Int = 3600 * 24 * 7 // 1 week
-    var temporaryIdValiditySec: Int = 3600 // 1 hour
+    var pubkeyValidityPeriodSec: Int = 1800 // 30 minutes
     var incubationPeriod: Int = 3600 * 24 * 7 * 3  // 3 weeks
 
     /* BLE advertising */
@@ -51,5 +49,6 @@ class WhisperConfig {
 
     /* GATT services and characteristics */
     var whisperServiceUUID: UUID = UUID.fromString("1e91022a-4c2a-434d-be23-d39eb6cd4952")
-    var whisperCharacteristicUUID: UUID = UUID.fromString("4d5c8851-6210-425f-8ab9-df679779a3b4")
+    var whisperV1CharacteristicUUID: UUID = UUID.fromString("4d5c8851-6210-425f-8ab9-df679779a3b4") // EBID
+    var whisperV3CharacteristicUUID: UUID = UUID.fromString("645ed98f-d6b0-46b5-a1a5-ce32bbf09232") // PET
 }
