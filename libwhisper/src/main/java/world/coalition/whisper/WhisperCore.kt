@@ -144,6 +144,15 @@ class WhisperCore : Whisper {
         return getDb(context).processTellTokens(infectedSet, tag,  sinceMsec)
     }
 
-    override suspend fun getRiskExposure(context: Context, tag: String): Int =
-        getDb(context).getRiskExposure(tag)
+    override suspend fun getNumberOfInteractions(context: Context, sinceTimestampMs: Long): Long {
+        return getDb(context).getNumberOfInteractions(sinceTimestampMs)
+    }
+
+    override suspend fun getNumberOfRiskInteractions(context: Context, tag: String, sinceTimestampMs: Long): Long {
+        return getDb(context).getNumberOfRiskInteractions(tag, sinceTimestampMs)
+    }
+
+    override suspend fun getRiskExposure(context: Context, tag: String, sinceTimestampMs: Long): Int =
+        getDb(context).getRiskExposure(tag, sinceTimestampMs)
+
 }

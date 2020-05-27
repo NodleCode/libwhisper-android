@@ -33,6 +33,12 @@ interface PrivateEncounterTokenDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     fun insert(set: PrivateEncounterToken): Long
 
+    @Query("SELECT COUNT(*) FROM privateencountertoken WHERE last_seen > :since")
+    fun getCount(since: Long): Long
+
+    @Query("SELECT COUNT(*) FROM privateencountertoken WHERE last_seen > :since AND  tag = :tag")
+    fun getCountWithTag(tag: String, since: Long): Long
+
     @Query("SELECT * FROM privateencountertoken ORDER BY last_seen")
     fun getAll(): List<PrivateEncounterToken>
 
@@ -68,6 +74,6 @@ interface PrivateEncounterTokenDao {
 
     @Query("SELECT COUNT(ping.elapsed_time_duration) FROM blepingevent ping " +
             "INNER JOIN privateencountertoken pet ON pet.row_id = ping.pet_rowid " +
-            "WHERE pet.tag = :tag")
-    suspend fun estimateRiskExposure(tag: String): Int
+            "WHERE pet.tag = :tag AND ping.ping_timestamp_ms > :since")
+    suspend fun estimateRiskExposure(tag: String, since: Long): Int
 }

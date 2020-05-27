@@ -111,10 +111,28 @@ interface Whisper {
     suspend fun processHearTokens(context: Context, infectedSet: List<String>, tag: String): Int
 
     /**
+     * returns the total number of interaction since a specific timestamp in msec
+     *
+     * @param sinceTimestampMs: The date from which to count interactions
+     */
+    suspend fun getNumberOfInteractions(context: Context, sinceTimestampMs: Long): Long
+
+    /**
+     * returns the total number of interaction whose got labelled with a risk
+     * since a specific timestamp in msec
+     *
+     * @param tag of the risk, for instance "covid-19"
+     * @param sinceTimestampMs: The date from which to count interactions
+     */
+    suspend fun getNumberOfRiskInteractions(context: Context, tag: String, sinceTimestampMs: Long): Long
+
+    /**
      * return an estimate of the exposure against a given risk.
      * This method only works in a decentralized scheme if current node where fed tokens.
      *
      * @param tag of the risk, for instance "covid-19"
+     * @param sinceTimestampMs: The date from which to count interactions
      */
-    suspend fun getRiskExposure(context: Context, tag: String): Int
+    suspend fun getRiskExposure(context: Context, tag: String, sinceTimestampMs: Long): Int
+
 }

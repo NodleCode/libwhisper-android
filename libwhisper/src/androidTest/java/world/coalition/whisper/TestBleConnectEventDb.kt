@@ -128,13 +128,21 @@ class TestBleConnectEventDb {
     @Test
     fun stage4_testRiskExposure() {
         var exp: Int = 0
+
+        val total = db.getNumberOfInteractions(0)
+        assertThat(total, equalTo(3L))
+        val covid19 = db.getNumberOfRiskInteractions("covid-19",0)
+        assertThat(covid19, equalTo(1L))
+        val sars = db.getNumberOfRiskInteractions("SARS-Cov", 0)
+        assertThat(sars, equalTo(1L))
+
         runBlocking {
-            exp = db.getRiskExposure("covid-19")
+            exp = db.getRiskExposure("covid-19", 0)
         }
         assertThat(exp, equalTo(4))
 
         runBlocking {
-            exp = db.getRiskExposure("SARS-Cov")
+            exp = db.getRiskExposure("SARS-Cov", 0)
         }
         assertThat(exp, equalTo(3))
     }

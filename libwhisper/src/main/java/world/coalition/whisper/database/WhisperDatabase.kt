@@ -162,7 +162,15 @@ class WhisperDatabase private constructor() {
         return nbOfMatches
     }
 
-    suspend fun getRiskExposure(tag: String): Int {
-        return roomDb.privateEncounterTokenDao().estimateRiskExposure(tag)
+    fun getNumberOfInteractions(sinceTimestampMs: Long): Long {
+        return roomDb.privateEncounterTokenDao().getCount(sinceTimestampMs)
+    }
+
+    fun getNumberOfRiskInteractions(tag: String, sinceTimestampMs: Long): Long {
+        return roomDb.privateEncounterTokenDao().getCountWithTag(tag, sinceTimestampMs)
+    }
+
+    suspend fun getRiskExposure(tag: String, sinceTimestampMs: Long): Int {
+        return roomDb.privateEncounterTokenDao().estimateRiskExposure(tag, sinceTimestampMs)
     }
 }
