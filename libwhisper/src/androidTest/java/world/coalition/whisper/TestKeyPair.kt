@@ -45,6 +45,7 @@ class TestKeyPair {
     @Test
     fun stage0_init() {
         db.roomDb.clearAllTables()
+        TestObjects.dump()
     }
 
     @Test

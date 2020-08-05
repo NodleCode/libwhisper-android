@@ -45,6 +45,7 @@ object ECUtil {
         //Security.addProvider(BouncyCastleProvider())
         kpgen = KeyPairGenerator.getInstance("ECDH", "BC")
         kpgen.initialize(ECGenParameterSpec("curve25519"), SecureRandom())
+
     }
 
     fun generateKeyPair(): KeyPair {
@@ -65,7 +66,12 @@ object ECUtil {
         return ProofOfInteraction(localToken, peerToken)
     }
 
-    private fun doEllipticCurveDiffieHellman(
+    fun doECDH(keyPair: KeyPair, peerPubKey: ByteArray): ByteArray {
+        val ecPrvKey: ECPrivateKey = keyPair.private as ECPrivateKey
+        return doEllipticCurveDiffieHellman(ecPrvKey.d.toByteArray(), peerPubKey)
+    }
+
+    fun doEllipticCurveDiffieHellman(
         dataPrv: ByteArray,
         dataPub: ByteArray
     ): ByteArray {
