@@ -21,11 +21,11 @@ package world.coalition.whisper.database
 import android.content.Context
 import android.util.Base64
 import androidx.room.Room
+import org.bouncycastle.crypto.AsymmetricCipherKeyPair
+import org.bouncycastle.crypto.params.X25519PublicKeyParameters
 import world.coalition.whisper.id.ECUtil
 import world.coalition.whisper.id.KeyPairParam
 import world.coalition.whisper.id.ProofOfInteraction
-import java.security.KeyPair
-import java.security.PublicKey
 
 /**
  * @author Lucien Loiseau on 04/04/20.
@@ -64,7 +64,7 @@ class WhisperDatabase private constructor() {
         roomDb.close()
     }
 
-    fun getCurrentKeyPair(time: Long, expireAfterSec: Int): KeyPair {
+    fun getCurrentKeyPair(time: Long, expireAfterSec: Int): AsymmetricCipherKeyPair {
         keyPairParam = keyPairParam ?: roomDb.userKeyPairDao().getLast()?.toKeyPairParam()
         // may still be null if no key in the db
 
@@ -75,8 +75,8 @@ class WhisperDatabase private constructor() {
         return keyPairParam!!.keyPair
     }
 
-    fun getCurrentPublicKey(time: Long, expireAfterSec: Int): PublicKey {
-        return getCurrentKeyPair(time, expireAfterSec).public
+    fun getCurrentPublicKey(time: Long, expireAfterSec: Int): X25519PublicKeyParameters {
+        return getCurrentKeyPair(time, expireAfterSec).public as X25519PublicKeyParameters
     }
 
     /* contact processor */

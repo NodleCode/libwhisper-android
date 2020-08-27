@@ -49,7 +49,7 @@ object TestObjects {
     }
 
     fun ByteArray.toHex() =
-        this.joinToString(separator = "") { it.toInt().and(0xff).toString(16) }
+        this.joinToString(separator = "") { it.toInt().and(0xff).toString(16).padStart(2, '0') }
 
     fun dump() {
         val a = SKA.privateKeyRaw()
@@ -83,6 +83,13 @@ object TestObjects {
         println("shared secret A <> B b64: "+Base64.encodeToString(proofAB, Base64.NO_WRAP))
         println("shared secret A <> B hex: "+proofAB.toHex())
 
+        val proofBA = ECUtil.doECDH(
+            SKB.keyPair,
+            SKA.publicKeyRaw()
+        )
+        println("shared secret B <> A b64: "+Base64.encodeToString(proofBA, Base64.NO_WRAP))
+        println("shared secret B <> A hex: "+proofBA.toHex())
+
         val interactionAB = ECUtil.getInteraction(
             SKA.keyPair,
             SKB.publicKeyRaw()
@@ -96,6 +103,14 @@ object TestObjects {
         )
         println("shared secret C <> D: "+Base64.encodeToString(proofCD, Base64.NO_WRAP))
         println("shared secret C <> D hex: "+proofCD.toHex())
+
+        val proofDC = ECUtil.doECDH(
+            SKD.keyPair,
+            SKC.publicKeyRaw()
+        )
+        println("shared secret D <> C: "+Base64.encodeToString(proofDC, Base64.NO_WRAP))
+        println("shared secret D <> C hex: "+proofDC.toHex())
+
         val interactionCD = ECUtil.getInteraction(
             SKC.keyPair,
             SKD.publicKeyRaw()
@@ -109,6 +124,13 @@ object TestObjects {
         )
         println("shared secret B <> E: "+Base64.encodeToString(proofBE, Base64.NO_WRAP))
         println("shared secret B <> E hex: "+proofBE.toHex())
+
+        val proofEB = ECUtil.doECDH(
+            SKE.keyPair,
+            SKB.publicKeyRaw()
+        )
+        println("shared secret E <> B: "+Base64.encodeToString(proofEB, Base64.NO_WRAP))
+        println("shared secret E <> B hex: "+proofEB.toHex())
 
         val interactionBE = ECUtil.getInteraction(
             SKB.keyPair,

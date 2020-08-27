@@ -19,103 +19,84 @@
 package world.coalition.whisper.id
 
 import android.util.Base64
+import org.bouncycastle.crypto.AsymmetricCipherKeyPair
+import org.bouncycastle.crypto.AsymmetricCipherKeyPairGenerator
+import org.bouncycastle.crypto.agreement.X25519Agreement
 import org.bouncycastle.crypto.digests.Blake2bDigest
-import org.bouncycastle.jce.ECNamedCurveTable
-import org.bouncycastle.jce.interfaces.ECPrivateKey
-import org.bouncycastle.jce.interfaces.ECPublicKey
-import org.bouncycastle.jce.provider.BouncyCastleProvider
-import org.bouncycastle.jce.spec.ECParameterSpec
-import org.bouncycastle.jce.spec.ECPrivateKeySpec
-import org.bouncycastle.jce.spec.ECPublicKeySpec
-import java.math.BigInteger
-import java.security.*
-import java.security.spec.ECGenParameterSpec
-import javax.crypto.KeyAgreement
+import org.bouncycastle.crypto.generators.X25519KeyPairGenerator
+import org.bouncycastle.crypto.params.X25519KeyGenerationParameters
+import org.bouncycastle.crypto.params.X25519PrivateKeyParameters
+import org.bouncycastle.crypto.params.X25519PublicKeyParameters
+import java.security.SecureRandom
 
 /**
  * @author Lucien Loiseau on 09/04/20.
  */
 object ECUtil {
 
-    private var kpgen: KeyPairGenerator
+    private var kpgen: AsymmetricCipherKeyPairGenerator = X25519KeyPairGenerator()
 
     init {
-        Security.removeProvider (BouncyCastleProvider.PROVIDER_NAME);
-        Security.insertProviderAt(BouncyCastleProvider(), 1);
-        //Security.addProvider(BouncyCastleProvider())
-        kpgen = KeyPairGenerator.getInstance("ECDH", "BC")
-        kpgen.initialize(ECGenParameterSpec("curve25519"), SecureRandom())
-
+        kpgen.init(X25519KeyGenerationParameters(SecureRandom()))
     }
 
-    fun generateKeyPair(): KeyPair {
+    fun generateKeyPair(): AsymmetricCipherKeyPair {
         return kpgen.generateKeyPair()
     }
 
-    fun getInteraction(keyPair: KeyPair, peerPubKey: ByteArray): ProofOfInteraction {
+    fun getInteraction(keyPair: AsymmetricCipherKeyPair, peerPubKey: ByteArray): ProofOfInteraction {
         // extract private and public keys
-        val ecPrvKey: ECPrivateKey = keyPair.private as ECPrivateKey
-        val ecPubkey: ECPublicKey = keyPair.public as ECPublicKey
+        val ecPrvKey: X25519PrivateKeyParameters = keyPair.private as X25519PrivateKeyParameters
+        val ecPubkey: X25519PublicKeyParameters = keyPair.public as X25519PublicKeyParameters
 
         // compute shared secret with diffie-hellman
-        val sharedSecret = doEllipticCurveDiffieHellman(ecPrvKey.d.toByteArray(), peerPubKey)
+        val sharedSecret = doEllipticCurveDiffieHellman(ecPrvKey.encoded, peerPubKey)
 
         // interaction tokens
-        val localToken = doBlake2b(sharedSecret, ecPubkey.q.getEncoded(true))
+        val localToken = doBlake2b(sharedSecret, ecPubkey.encoded)
         val peerToken = doBlake2b(sharedSecret, peerPubKey)
         return ProofOfInteraction(localToken, peerToken)
     }
 
-    fun doECDH(keyPair: KeyPair, peerPubKey: ByteArray): ByteArray {
-        val ecPrvKey: ECPrivateKey = keyPair.private as ECPrivateKey
-        return doEllipticCurveDiffieHellman(ecPrvKey.d.toByteArray(), peerPubKey)
+    fun doECDH(keyPair: AsymmetricCipherKeyPair, peerPubKey: ByteArray): ByteArray {
+        val ecPrvKey: X25519PrivateKeyParameters = keyPair.private as X25519PrivateKeyParameters
+        return doEllipticCurveDiffieHellman(ecPrvKey.encoded, peerPubKey)
     }
 
     fun doEllipticCurveDiffieHellman(
         dataPrv: ByteArray,
         dataPub: ByteArray
     ): ByteArray {
-        val ka: KeyAgreement = KeyAgreement.getInstance("ECDH", "BC")
-        ka.init(loadPrivateKey(dataPrv))
-        ka.doPhase(loadPublicKey(dataPub), true)
-        return ka.generateSecret()
+        val agree = X25519Agreement()
+        agree.init(loadPrivateKey(dataPrv))
+        val secret = ByteArray(agree.agreementSize)
+        agree.calculateAgreement(loadPublicKey(dataPub), secret, 0)
+        return secret
     }
 
-    fun savePublicKey(key: PublicKey): ByteArray {
-        val eckey: ECPublicKey = key as ECPublicKey
-        return eckey.q.getEncoded(true)
+    fun savePublicKey(key: X25519PublicKeyParameters): ByteArray {
+        return key.encoded
     }
 
-    fun savePublicKeyBase64(key: PublicKey): String {
+    fun savePublicKeyBase64(key: X25519PublicKeyParameters): String {
         val raw = savePublicKey(key)
         return Base64.encodeToString(raw, Base64.NO_WRAP)
     }
 
-    fun loadPublicKey(data: ByteArray): PublicKey {
-        val params: ECParameterSpec = ECNamedCurveTable.getParameterSpec("curve25519")
-        val pubKey = ECPublicKeySpec(
-            params.curve.decodePoint(data), params
-        )
-        val kf: KeyFactory = KeyFactory.getInstance("ECDH", "BC")
-        return kf.generatePublic(pubKey)
+    fun loadPublicKey(data: ByteArray): X25519PublicKeyParameters =
+        X25519PublicKeyParameters(data, 0)
+
+    fun savePrivateKey(key: X25519PrivateKeyParameters): ByteArray {
+        return key.encoded
     }
 
-    fun savePrivateKey(key: PrivateKey): ByteArray {
-        val eckey: ECPrivateKey = key as ECPrivateKey
-        return eckey.d.toByteArray()
-    }
-
-    fun savePrivateKeyBase64(key: PrivateKey): String {
+    fun savePrivateKeyBase64(key: X25519PrivateKeyParameters): String {
         val raw = savePrivateKey(key)
         return Base64.encodeToString(raw, Base64.NO_WRAP)
     }
 
-    fun loadPrivateKey(data: ByteArray): PrivateKey {
-        val params: ECParameterSpec = ECNamedCurveTable.getParameterSpec("curve25519")
-        val prvkey = ECPrivateKeySpec(BigInteger(data), params)
-        val kf: KeyFactory = KeyFactory.getInstance("ECDH", "BC")
-        return kf.generatePrivate(prvkey)
-    }
+    fun loadPrivateKey(data: ByteArray): X25519PrivateKeyParameters =
+        X25519PrivateKeyParameters(data, 0)
 
     fun doBlake2b(
         K: ByteArray,

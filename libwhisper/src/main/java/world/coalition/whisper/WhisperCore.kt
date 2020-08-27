@@ -26,6 +26,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
+import org.bouncycastle.crypto.AsymmetricCipherKeyPair
+import org.bouncycastle.crypto.params.X25519PublicKeyParameters
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import world.coalition.whisper.agathe.BleScanner
@@ -111,13 +113,13 @@ class WhisperCore : Whisper {
         return coreJob != null
     }
 
-    fun getKeyPair(context: Context): KeyPair {
+    fun getKeyPair(context: Context): AsymmetricCipherKeyPair {
         return getDb(context).getCurrentKeyPair(
             System.currentTimeMillis() / 1000,
             whisperConfig.pubkeyValidityPeriodSec)
     }
 
-    fun getPublicKey(context: Context): PublicKey {
+    fun getPublicKey(context: Context): X25519PublicKeyParameters {
         return getDb(context).getCurrentPublicKey(
             System.currentTimeMillis() / 1000,
             whisperConfig.pubkeyValidityPeriodSec)

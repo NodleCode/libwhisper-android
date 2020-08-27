@@ -19,13 +19,15 @@
 package world.coalition.whisper.id
 
 import android.util.Base64
-import java.security.KeyPair
+import org.bouncycastle.crypto.AsymmetricCipherKeyPair
+import org.bouncycastle.crypto.params.X25519PrivateKeyParameters
+import org.bouncycastle.crypto.params.X25519PublicKeyParameters
 
 /**
  * @author Lucien Loiseau on 28/03/20.
  */
 data class KeyPairParam(
-    val keyPair: KeyPair,
+    val keyPair: AsymmetricCipherKeyPair,
     val TimeReferenceSec: Long,
     val ExpireAfterSec: Int
 ) {
@@ -35,7 +37,7 @@ data class KeyPairParam(
         timeReferenceSec: Long,
         expireAfterSec: Int
     ) : this(
-        KeyPair(
+        AsymmetricCipherKeyPair(
             ECUtil.loadPublicKey(publicKeyRaw),
             ECUtil.loadPrivateKey(privateKeyRaw)
         ),
@@ -47,11 +49,11 @@ data class KeyPairParam(
     }
 
     fun publicKeyRaw(): ByteArray {
-        return ECUtil.savePublicKey(keyPair.public)
+        return ECUtil.savePublicKey(keyPair.public as X25519PublicKeyParameters)
     }
 
     fun privateKeyRaw(): ByteArray {
-        return ECUtil.savePrivateKey(keyPair.private)
+        return ECUtil.savePrivateKey(keyPair.private as X25519PrivateKeyParameters)
     }
 
     fun isExpire(time: Long): Boolean {
